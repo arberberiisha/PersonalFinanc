@@ -1,11 +1,13 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import html2pdf from "html2pdf.js";
 import { saveAs } from "file-saver";
 import ExcelJS from "exceljs";
 import Swal from "sweetalert2";
+import './App.css';
 
 export default function PersonalFinanceTracker() {
   const [entries, setEntries] = useState([]);
+  const [darkMode, setDarkMode] = useState(false);
   const [form, setForm] = useState({
     type: "Expense",
     category: "",
@@ -15,6 +17,11 @@ export default function PersonalFinanceTracker() {
   });
 
   const pdfRef = useRef();
+
+  useEffect(() => {
+    console.log("Dark mode:", darkMode);
+    document.body.classList.toggle("dark-mode", darkMode);
+  }, [darkMode]);
 
   const handleChange = (field, value) => {
     setForm({ ...form, [field]: value });
@@ -43,9 +50,16 @@ export default function PersonalFinanceTracker() {
 
   const exportToPDF = () => {
     const element = pdfRef.current;
+  
+    // Step 1: Temporarily remove dark mode
+    const originalDark = darkMode;
+    document.body.classList.remove("dark-mode");
+  
+    // Step 2: Hide .no-print inputs
     const toHide = element.querySelectorAll(".no-print");
     toHide.forEach((el) => (el.style.display = "none"));
-
+  
+    // Step 3: Export PDF
     const options = {
       margin: 0.5,
       filename: "finance-report.pdf",
@@ -53,13 +67,19 @@ export default function PersonalFinanceTracker() {
       html2canvas: { scale: 2 },
       jsPDF: { unit: "in", format: "letter", orientation: "portrait" },
     };
-
+  
     html2pdf()
       .set(options)
       .from(element)
       .save()
       .then(() => {
+        // Step 4: Show inputs again
         toHide.forEach((el) => (el.style.display = ""));
+  
+        // Step 5: Restore dark mode if needed
+        if (originalDark) {
+          document.body.classList.add("dark-mode");
+        }
       });
   };
 
@@ -73,13 +93,12 @@ export default function PersonalFinanceTracker() {
       cancelButtonColor: "#3085d6",
       confirmButtonText: "Yes, clear it!",
     });
-  
+
     if (result.isConfirmed) {
       setEntries([]);
       Swal.fire("Cleared!", "All entries have been removed.", "success");
     }
   };
-  
 
   const exportToExcel = async () => {
     const workbook = new ExcelJS.Workbook();
@@ -134,7 +153,8 @@ export default function PersonalFinanceTracker() {
 
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      type:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     });
     saveAs(blob, "finance-report.xlsx");
   };
@@ -168,12 +188,20 @@ export default function PersonalFinanceTracker() {
   return (
     <>
       <div className="container py-4 no-print">
-        <input
-          type="file"
-          accept=".xlsx"
-          className="form-control mb-3"
-          onChange={handleFileUpload}
-        />
+        <div className="d-flex justify-content-between align-items-center mb-3">
+          <input
+            type="file"
+            accept=".xlsx"
+            className="form-control w-50"
+            onChange={handleFileUpload}
+          />
+          <button
+            className={`btn ${darkMode ? "btn-light" : "btn-dark"} ms-3`}
+            onClick={() => setDarkMode(!darkMode)}
+          >
+            {darkMode ? "☀️ Light Mode" : "🌙 Dark Mode"}
+          </button>
+        </div>
       </div>
 
       <div className="container py-5" ref={pdfRef}>
@@ -241,10 +269,7 @@ export default function PersonalFinanceTracker() {
             />
           </div>
           <div className="col-md-2">
-            <button
-              className="btn btn-danger w-100"
-              onClick={addEntry}
-            >
+            <button className="btn btn-danger w-100" onClick={addEntry}>
               Add Entry
             </button>
           </div>
