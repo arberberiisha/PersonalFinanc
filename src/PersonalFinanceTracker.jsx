@@ -3,7 +3,8 @@ import html2pdf from "html2pdf.js";
 import { saveAs } from "file-saver";
 import ExcelJS from "exceljs";
 import Swal from "sweetalert2";
-import './App.css';
+import "./App.css";
+import { useTranslations } from "./LanguageContext";
 
 export default function PersonalFinanceTracker() {
   const [entries, setEntries] = useState([]);
@@ -17,9 +18,12 @@ export default function PersonalFinanceTracker() {
   });
 
   const pdfRef = useRef();
+  const imageInputRef = useRef();
+  const excelInputRef = useRef();
+
+  const { translations: t, language, setLanguage } = useTranslations();
 
   useEffect(() => {
-    console.log("Dark mode:", darkMode);
     document.body.classList.toggle("dark-mode", darkMode);
   }, [darkMode]);
 
@@ -50,33 +54,25 @@ export default function PersonalFinanceTracker() {
 
   const exportToPDF = () => {
     const element = pdfRef.current;
-  
-    // Step 1: Temporarily remove dark mode
     const originalDark = darkMode;
     document.body.classList.remove("dark-mode");
-  
-    // Step 2: Hide .no-print inputs
     const toHide = element.querySelectorAll(".no-print");
     toHide.forEach((el) => (el.style.display = "none"));
-  
-    // Step 3: Export PDF
+
     const options = {
       margin: 0.5,
       filename: "finance-report.pdf",
       image: { type: "jpeg", quality: 0.98 },
-      html2canvas: { scale: 2 },
+      html2canvas: { scale: 2, useCORS: true },
       jsPDF: { unit: "in", format: "letter", orientation: "portrait" },
     };
-  
+
     html2pdf()
       .set(options)
       .from(element)
       .save()
       .then(() => {
-        // Step 4: Show inputs again
         toHide.forEach((el) => (el.style.display = ""));
-  
-        // Step 5: Restore dark mode if needed
         if (originalDark) {
           document.body.classList.add("dark-mode");
         }
@@ -85,28 +81,27 @@ export default function PersonalFinanceTracker() {
 
   const clearAllEntries = async () => {
     const result = await Swal.fire({
-      title: "Clear All?",
-      text: "This will remove all your data permanently.",
+      title: t.clearConfirmTitle,
+      text: t.clearConfirmText,
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#d33",
       cancelButtonColor: "#3085d6",
-      confirmButtonText: "Yes, clear it!",
+      confirmButtonText: t.confirm,
     });
 
     if (result.isConfirmed) {
       setEntries([]);
-      Swal.fire("Cleared!", "All entries have been removed.", "success");
+      Swal.fire(t.cleared, t.clearedMessage, "success");
     }
   };
 
   const exportToExcel = async () => {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Finance Report");
-
     sheet.mergeCells("A1", "E1");
     const titleCell = sheet.getCell("A1");
-    titleCell.value = "Personal Finance Report";
+    titleCell.value = t.title;
     titleCell.font = { size: 16, bold: true };
     titleCell.alignment = { horizontal: "center" };
 
@@ -146,15 +141,11 @@ export default function PersonalFinanceTracker() {
     sheet.addRow(["Total Income", "", "", "", totalIncome]);
     sheet.addRow(["Total Expense", "", "", "", totalExpense]);
     sheet.addRow(["Balance", "", "", "", balance]);
-
-    sheet.columns.forEach((col) => {
-      col.width = 20;
-    });
+    sheet.columns.forEach((col) => (col.width = 20));
 
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], {
-      type:
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     });
     saveAs(blob, "finance-report.xlsx");
   };
@@ -183,145 +174,200 @@ export default function PersonalFinanceTracker() {
     });
 
     setEntries((prev) => [...prev, ...newEntries]);
+    if (excelInputRef.current) excelInputRef.current.value = null;
+  };
+
+  const handleBillImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("bill", file);
+
+    try {
+      const res = await fetch("http://localhost:8080/api/analyze-bill", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      const parsed = typeof data === "string" ? JSON.parse(data) : data;
+
+      setEntries((prev) => [
+        ...prev,
+        {
+          type: "Expense",
+          month: "January",
+          category: parsed.category || "Bill",
+          description: "",
+          actual: parsed.actual || "0.00",
+        },
+      ]);
+
+      if (imageInputRef.current) imageInputRef.current.value = null;
+    } catch (err) {
+      console.error("Failed to analyze bill", err);
+      alert(t.analyzeError);
+    }
   };
 
   return (
     <>
-      <div className="container py-4 no-print">
-        <div className="d-flex justify-content-between align-items-center mb-3">
-          <input
-            type="file"
-            accept=".xlsx"
-            className="form-control w-50"
-            onChange={handleFileUpload}
-          />
-          <button
-            className={`btn ${darkMode ? "btn-light" : "btn-dark"} ms-3`}
-            onClick={() => setDarkMode(!darkMode)}
-          >
-            {darkMode ? "☀️ Light Mode" : "🌙 Dark Mode"}
-          </button>
-        </div>
-      </div>
+      <div ref={pdfRef}>
+        <div className="container py-3">
+          <div className="d-flex justify-content-between align-items-center mb-2">
+            <h1 className="flex-grow-1 text-center m-0">{t.title}</h1>
+            <div className="d-flex gap-2 no-print">
+              <button
+                className={`btn ${darkMode ? "btn-light" : "btn-dark"}`}
+                onClick={() => setDarkMode(!darkMode)}
+              >
+                {darkMode ? t.lightMode : t.darkMode}
+              </button>
 
-      <div className="container py-5" ref={pdfRef}>
-        <h1 className="text-center mb-4">Personal Finance Tracker</h1>
+              <button
+                className="btn btn-outline-secondary"
+                onClick={() => setLanguage(language === "en" ? "sq" : "en")}
+              >
+                🌐 {language === "en" ? "Shqip" : "English"}
+              </button>
+            </div>
+          </div>
 
-        {/* Form inputs */}
-        <div className="no-print row g-3 mb-4">
-          <div className="col-md-2">
-            <select
-              className="form-select"
-              value={form.type}
-              onChange={(e) => handleChange("type", e.target.value)}
+          <div className="d-flex flex-wrap gap-3 justify-content-center mb-1 mt-5 no-print">
+            <input
+              type="file"
+              accept=".xlsx"
+              ref={excelInputRef}
+              style={{ display: "none" }}
+              onChange={handleFileUpload}
+            />
+            <input
+              type="file"
+              accept="image/*"
+              ref={imageInputRef}
+              style={{ display: "none" }}
+              onChange={handleBillImageUpload}
+            />
+
+            <button
+              className="btn btn-outline-primary px-4 py-2 shadow-sm fw-semibold rounded-pill"
+              onClick={() => excelInputRef.current.click()}
             >
-              <option>Income</option>
-              <option>Expense</option>
-            </select>
-          </div>
-          <div className="col-md-2">
-            <select
-              className="form-select"
-              value={form.month}
-              onChange={(e) => handleChange("month", e.target.value)}
+              {t.importExcel}
+            </button>
+
+            <button
+              className="btn btn-outline-warning px-4 py-2 shadow-sm fw-semibold rounded-pill"
+              onClick={() => imageInputRef.current.click()}
             >
-              {[
-                "January",
-                "February",
-                "March",
-                "April",
-                "May",
-                "June",
-                "July",
-                "August",
-                "September",
-                "October",
-                "November",
-                "December",
-              ].map((month) => (
-                <option key={month}>{month}</option>
-              ))}
-            </select>
-          </div>
-          <div className="col-md-2">
-            <input
-              className="form-control"
-              placeholder="Category"
-              value={form.category}
-              onChange={(e) => handleChange("category", e.target.value)}
-            />
-          </div>
-          <div className="col-md-2">
-            <input
-              className="form-control"
-              placeholder="Description"
-              value={form.description}
-              onChange={(e) => handleChange("description", e.target.value)}
-            />
-          </div>
-          <div className="col-md-2">
-            <input
-              type="number"
-              className="form-control"
-              placeholder="Amount"
-              value={form.actual}
-              onChange={(e) => handleChange("actual", e.target.value)}
-            />
-          </div>
-          <div className="col-md-2">
-            <button className="btn btn-danger w-100" onClick={addEntry}>
-              Add Entry
+              {t.scanBill}
             </button>
           </div>
         </div>
 
-        {/* Table */}
-        <table className="table table-bordered table-striped">
-          <thead>
-            <tr>
-              <th>Month</th>
-              <th>Type</th>
-              <th>Category</th>
-              <th>Description</th>
-              <th>Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((e, i) => (
-              <tr key={i}>
-                <td>{e.month}</td>
-                <td>{e.type}</td>
-                <td>{e.category}</td>
-                <td>{e.description}</td>
-                <td>${e.actual}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="container py-3">
+          <div className="no-print row g-3 mb-4">
+            <div className="col-md-2">
+              <select
+                className="form-select"
+                value={form.type}
+                onChange={(e) => handleChange("type", e.target.value)}
+              >
+                <option>{t.income}</option>
+                <option>{t.expense}</option>
+              </select>
+            </div>
+            <div className="col-md-2">
+              <select
+                className="form-select"
+                value={form.month}
+                onChange={(e) => handleChange("month", e.target.value)}
+              >
+                {t.months.map((month, index) => (
+                  <option key={index}>{month}</option>
+                ))}
+              </select>
+            </div>
+            <div className="col-md-2">
+              <input
+                className="form-control"
+                placeholder={t.category}
+                value={form.category}
+                onChange={(e) => handleChange("category", e.target.value)}
+              />
+            </div>
+            <div className="col-md-2">
+              <input
+                className="form-control"
+                placeholder={t.description}
+                value={form.description}
+                onChange={(e) => handleChange("description", e.target.value)}
+              />
+            </div>
+            <div className="col-md-2">
+              <input
+                type="number"
+                className="form-control"
+                placeholder={t.amount}
+                value={form.actual}
+                onChange={(e) => handleChange("actual", e.target.value)}
+              />
+            </div>
+            <div className="col-md-2">
+              <button className="btn btn-danger w-100" onClick={addEntry}>
+                {t.addEntry}
+              </button>
+            </div>
+          </div>
 
-        <div className="mt-4">
-          <p>
-            <strong className="text-success">Total Income:</strong> ${totalIncome}
-          </p>
-          <p>
-            <strong className="text-danger">Total Expense:</strong> ${totalExpense}
-          </p>
-          <p>
-            <strong className="text-primary">Balance:</strong> ${balance}
-          </p>
+          <table className="table table-bordered table-striped">
+            <thead>
+              <tr>
+                <th>{t.month}</th>
+                <th>{t.type}</th>
+                <th>{t.category}</th>
+                <th>{t.description}</th>
+                <th>{t.amount}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((e, i) => (
+                <tr key={i}>
+                  <td>{e.month}</td>
+                  <td>{e.type}</td>
+                  <td>{e.category}</td>
+                  <td>{e.description}</td>
+                  <td>${e.actual}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="mt-4">
+            <p>
+              <strong className="text-success">{t.totalIncome}:</strong> $
+              {totalIncome}
+            </p>
+            <p>
+              <strong className="text-danger">{t.totalExpense}:</strong> $
+              {totalExpense}
+            </p>
+            <p>
+              <strong className="text-primary">{t.balance}:</strong> ${balance}
+            </p>
+          </div>
         </div>
       </div>
-
-      {/* Export Buttons */}
       <div className="container d-flex gap-3 mt-3">
         <button className="btn btn-primary" onClick={exportToPDF}>
-          Export as PDF
+          {t.exportPDF}
         </button>
         <button className="btn btn-success" onClick={exportToExcel}>
-          Export as Excel
+          {t.exportExcel}
         </button>
         <button className="btn btn-outline-danger" onClick={clearAllEntries}>
-          Clear All
+          {t.clearAll}
         </button>
       </div>
     </>
