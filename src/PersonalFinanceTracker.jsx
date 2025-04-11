@@ -1,10 +1,11 @@
 import React, { useRef, useState, useEffect } from "react";
-import html2pdf from "html2pdf.js";
-import { saveAs } from "file-saver";
-import ExcelJS from "exceljs";
 import Swal from "sweetalert2";
-import "./App.css";
 import { useTranslations } from "./LanguageContext";
+
+import { exportToPDF } from "./utils/exportToPDF";
+import { exportToExcel } from "./utils/exportToExcel";
+import { uploadBillImage } from "./utils/billUploader";
+import "./App.css";
 
 export default function PersonalFinanceTracker() {
   const [entries, setEntries] = useState([]);
@@ -52,33 +53,6 @@ export default function PersonalFinanceTracker() {
     .reduce((acc, e) => acc + Number(e.actual), 0);
   const balance = totalIncome - totalExpense;
 
-  const exportToPDF = () => {
-    const element = pdfRef.current;
-    const originalDark = darkMode;
-    document.body.classList.remove("dark-mode");
-    const toHide = element.querySelectorAll(".no-print");
-    toHide.forEach((el) => (el.style.display = "none"));
-
-    const options = {
-      margin: 0.5,
-      filename: "finance-report.pdf",
-      image: { type: "jpeg", quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true },
-      jsPDF: { unit: "in", format: "letter", orientation: "portrait" },
-    };
-
-    html2pdf()
-      .set(options)
-      .from(element)
-      .save()
-      .then(() => {
-        toHide.forEach((el) => (el.style.display = ""));
-        if (originalDark) {
-          document.body.classList.add("dark-mode");
-        }
-      });
-  };
-
   const clearAllEntries = async () => {
     const result = await Swal.fire({
       title: t.clearConfirmTitle,
@@ -96,64 +70,11 @@ export default function PersonalFinanceTracker() {
     }
   };
 
-  const exportToExcel = async () => {
-    const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet("Finance Report");
-    sheet.mergeCells("A1", "E1");
-    const titleCell = sheet.getCell("A1");
-    titleCell.value = t.title;
-    titleCell.font = { size: 16, bold: true };
-    titleCell.alignment = { horizontal: "center" };
-
-    const headerRow = sheet.addRow([
-      "Month",
-      "Type",
-      "Category",
-      "Description",
-      "Amount",
-    ]);
-    headerRow.eachCell((cell) => {
-      cell.font = { bold: true };
-      cell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FFCCCCCC" },
-      };
-      cell.border = {
-        top: { style: "thin" },
-        left: { style: "thin" },
-        bottom: { style: "thin" },
-        right: { style: "thin" },
-      };
-    });
-
-    entries.forEach((e) => {
-      sheet.addRow([
-        e.month,
-        e.type,
-        e.category,
-        e.description,
-        Number(e.actual),
-      ]);
-    });
-
-    sheet.addRow([]);
-    sheet.addRow(["Total Income", "", "", "", totalIncome]);
-    sheet.addRow(["Total Expense", "", "", "", totalExpense]);
-    sheet.addRow(["Balance", "", "", "", balance]);
-    sheet.columns.forEach((col) => (col.width = 20));
-
-    const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-    saveAs(blob, "finance-report.xlsx");
-  };
-
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
+    const ExcelJS = await import("exceljs");
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(await file.arrayBuffer());
     const worksheet = workbook.getWorksheet(1);
@@ -180,33 +101,12 @@ export default function PersonalFinanceTracker() {
   const handleBillImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
-    const formData = new FormData();
-    formData.append("bill", file);
-
     try {
-      const res = await fetch("http://localhost:8080/api/analyze-bill", {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await res.json();
-      const parsed = typeof data === "string" ? JSON.parse(data) : data;
-
-      setEntries((prev) => [
-        ...prev,
-        {
-          type: "Expense",
-          month: "January",
-          category: parsed.category || "Bill",
-          description: "",
-          actual: parsed.actual || "0.00",
-        },
-      ]);
-
+      const entry = await uploadBillImage(file);
+      setEntries((prev) => [...prev, entry]);
       if (imageInputRef.current) imageInputRef.current.value = null;
     } catch (err) {
-      console.error("Failed to analyze bill", err);
+      console.error("Bill analysis failed:", err);
       alert(t.analyzeError);
     }
   };
@@ -219,14 +119,14 @@ export default function PersonalFinanceTracker() {
             <h1 className="flex-grow-1 text-center m-0">{t.title}</h1>
             <div className="d-flex gap-2 no-print">
               <button
-                className={`btn ${darkMode ? "btn-light" : "btn-dark"}`}
+                className={`btn ${darkMode ? "btn-light" : "btn-dark"} no-print`}
                 onClick={() => setDarkMode(!darkMode)}
               >
                 {darkMode ? t.lightMode : t.darkMode}
               </button>
 
               <button
-                className="btn btn-outline-secondary"
+                className="btn btn-outline-secondary no-print"
                 onClick={() => setLanguage(language === "en" ? "sq" : "en")}
               >
                 🌐 {language === "en" ? "Shqip" : "English"}
@@ -249,16 +149,14 @@ export default function PersonalFinanceTracker() {
               style={{ display: "none" }}
               onChange={handleBillImageUpload}
             />
-
             <button
-              className="btn btn-outline-primary px-4 py-2 shadow-sm fw-semibold rounded-pill"
+              className="btn btn-outline-primary no-print"
               onClick={() => excelInputRef.current.click()}
             >
               {t.importExcel}
             </button>
-
             <button
-              className="btn btn-outline-warning px-4 py-2 shadow-sm fw-semibold rounded-pill"
+              className="btn btn-outline-warning no-print"
               onClick={() => imageInputRef.current.click()}
             >
               {t.scanBill}
@@ -359,11 +257,28 @@ export default function PersonalFinanceTracker() {
           </div>
         </div>
       </div>
+
       <div className="container d-flex gap-3 mt-3">
-        <button className="btn btn-primary" onClick={exportToPDF}>
+        <button
+          className="btn btn-primary"
+          onClick={() => exportToPDF({ element: pdfRef.current, darkMode })}
+        >
           {t.exportPDF}
         </button>
-        <button className="btn btn-success" onClick={exportToExcel}>
+        <button
+          className="btn btn-success"
+          onClick={() =>
+            exportToExcel({
+              entries,
+              totals: {
+                income: totalIncome,
+                expense: totalExpense,
+                balance,
+              },
+              title: t.title,
+            })
+          }
+        >
           {t.exportExcel}
         </button>
         <button className="btn btn-outline-danger" onClick={clearAllEntries}>
