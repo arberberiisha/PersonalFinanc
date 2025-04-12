@@ -24,6 +24,8 @@
   "analyzeError": "Ndodhi një gabim gjatë analizës së faturës.",
   "income": "Të ardhura",
   "expense": "Shpenzime",
+  "aiUnavailableTitle": "Shërbimi AI Nuk Është i Disponueshëm",
+  "aiUnavailableMessage": "Skano Faturën (AI - Inteligjencë Artificiale) nuk është aktualisht i disponueshëm. Ju lutemi provoni më vonë.",
   "months": [
     "Janar",
     "Shkurt",

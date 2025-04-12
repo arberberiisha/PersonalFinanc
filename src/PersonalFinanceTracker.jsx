@@ -5,6 +5,7 @@ import { useTranslations } from "./LanguageContext";
 import { exportToPDF } from "./utils/exportToPDF";
 import { exportToExcel } from "./utils/exportToExcel";
 import { uploadBillImage } from "./utils/billUploader";
+import { showError } from "./utils/showError";
 import "./App.css";
 
 export default function PersonalFinanceTracker() {
@@ -107,12 +108,7 @@ export default function PersonalFinanceTracker() {
       await uploadBillImage({ file, setEntries });
     } catch (err) {
       console.error("Bill analysis failed:", err);
-      Swal.fire({
-        icon: "info",
-        title: "AI Service Unavailable",
-        text: "Scan Bill (AI) is currently not available. Please try again later.",
-        confirmButtonColor: "#3085d6",
-      });
+      showError(t.aiUnavailableTitle, t.aiUnavailableMessage);
     } finally {
       // Always reset the input so re-selecting the same file works
       if (imageInputRef.current) {
