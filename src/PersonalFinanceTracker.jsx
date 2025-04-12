@@ -136,7 +136,7 @@ export default function PersonalFinanceTracker() {
               >
                 {darkMode ? t.lightMode : t.darkMode}
               </button>
-
+              
               <button
                 className="btn btn-outline-secondary no-print"
                 onClick={() => setLanguage(language === "en" ? "sq" : "en")}
