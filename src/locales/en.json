@@ -24,6 +24,8 @@
   "analyzeError": "Something went wrong analyzing the bill.",
   "income": "Income",
   "expense": "Expense",
+  "aiUnavailableTitle": "AI Service Unavailable",
+  "aiUnavailableMessage": "Scan Bill (AI) is currently not available. Please try again later.",
   "months": [
     "January",
     "February",
