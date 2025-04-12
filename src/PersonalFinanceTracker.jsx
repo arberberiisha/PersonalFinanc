@@ -9,21 +9,40 @@ import { showError } from "./utils/showError";
 import "./App.css";
 
 export default function PersonalFinanceTracker() {
+
+  const { translations: t, language, setLanguage } = useTranslations();
+  
+  const monthNames = {
+    en: [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December",
+    ],
+    sq: [
+      "Janar", "Shkurt", "Mars", "Prill", "Maj", "Qershor",
+      "Korrik", "Gusht", "Shtator", "Tetor", "Nëntor", "Dhjetor",
+    ],
+  };
+
+  const getCurrentMonth = (language) => {
+    const now = new Date();
+    const index = now.getMonth();
+    return monthNames[language][index];
+  };
+
   const [entries, setEntries] = useState([]);
   const [darkMode, setDarkMode] = useState(false);
+  
   const [form, setForm] = useState({
     type: "Expense",
     category: "",
     description: "",
     actual: "",
-    month: "January",
+    month: getCurrentMonth(language),
   });
 
   const pdfRef = useRef();
   const imageInputRef = useRef();
   const excelInputRef = useRef();
-
-  const { translations: t, language, setLanguage } = useTranslations();
 
   useEffect(() => {
     document.body.classList.toggle("dark-mode", darkMode);
@@ -34,14 +53,18 @@ export default function PersonalFinanceTracker() {
   };
 
   const addEntry = () => {
-    if (form.actual && form.category && form.description) {
-      setEntries([...entries, form]);
+    if (form.actual && form.category) {
+      setEntries([...entries, {
+        ...form,
+        actual: Number(form.actual),
+        description: form.description || "",
+      }]);
       setForm({
         type: "Expense",
         category: "",
         description: "",
         actual: "",
-        month: "January",
+        month: getCurrentMonth(),
       });
     }
   };
@@ -83,9 +106,10 @@ export default function PersonalFinanceTracker() {
 
     const newEntries = [];
     worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber === 1) return;
+      if (rowNumber <= 2) return;
+    
       const [month, type, category, description, actual] = row.values.slice(1);
-      if (month && type && category && description && actual) {
+      if (month && type && category && description && actual && !isNaN(actual)) {
         newEntries.push({
           month,
           type,
@@ -268,7 +292,7 @@ export default function PersonalFinanceTracker() {
         </div>
       </div>
 
-      <div className="container d-flex gap-3 mt-3">
+      <div className="container d-flex gap-3 mt-3 mb-3">
         <button
           className="btn btn-primary"
           onClick={() => exportToPDF({ element: pdfRef.current, darkMode })}
