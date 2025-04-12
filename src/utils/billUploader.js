@@ -18,9 +18,9 @@ export const uploadBillImage = async ({ file, setEntries }) => {
         {
           type: "Expense",
           month: "January",
-          category: parsed.category || "Bill",
-          description: "",
-          actual: parsed.actual || "0.00",
+          category: parsed?.category || "Bill",
+          description: parsed?.description || "",
+          actual: parsed?.actual ? Number(parsed.actual) : 0,
         },
       ]);
     } catch (err) {

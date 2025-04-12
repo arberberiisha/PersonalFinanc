@@ -46,10 +46,11 @@ export default function PersonalFinanceTracker() {
   };
 
   const totalIncome = entries
-    .filter((e) => e.type === "Income")
+    .filter((e) => e && e.type === "Income")
     .reduce((acc, e) => acc + Number(e.actual), 0);
+
   const totalExpense = entries
-    .filter((e) => e.type === "Expense")
+    .filter((e) => e && e.type === "Expense")
     .reduce((acc, e) => acc + Number(e.actual), 0);
   const balance = totalIncome - totalExpense;
 
@@ -101,13 +102,22 @@ export default function PersonalFinanceTracker() {
   const handleBillImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+  
     try {
-      const entry = await uploadBillImage(file);
-      setEntries((prev) => [...prev, entry]);
-      if (imageInputRef.current) imageInputRef.current.value = null;
+      await uploadBillImage({ file, setEntries });
     } catch (err) {
       console.error("Bill analysis failed:", err);
-      alert(t.analyzeError);
+      Swal.fire({
+        icon: "info",
+        title: "AI Service Unavailable",
+        text: "Scan Bill (AI) is currently not available. Please try again later.",
+        confirmButtonColor: "#3085d6",
+      });
+    } finally {
+      // Always reset the input so re-selecting the same file works
+      if (imageInputRef.current) {
+        imageInputRef.current.value = null;
+      }
     }
   };
 
@@ -119,7 +129,9 @@ export default function PersonalFinanceTracker() {
             <h1 className="flex-grow-1 text-center m-0">{t.title}</h1>
             <div className="d-flex gap-2 no-print">
               <button
-                className={`btn ${darkMode ? "btn-light" : "btn-dark"} no-print`}
+                className={`btn ${
+                  darkMode ? "btn-light" : "btn-dark"
+                } no-print`}
                 onClick={() => setDarkMode(!darkMode)}
               >
                 {darkMode ? t.lightMode : t.darkMode}
@@ -230,15 +242,17 @@ export default function PersonalFinanceTracker() {
               </tr>
             </thead>
             <tbody>
-              {entries.map((e, i) => (
-                <tr key={i}>
-                  <td>{e.month}</td>
-                  <td>{e.type}</td>
-                  <td>{e.category}</td>
-                  <td>{e.description}</td>
-                  <td>${e.actual}</td>
-                </tr>
-              ))}
+              {entries.map((e, i) =>
+                e ? (
+                  <tr key={i}>
+                    <td>{e.month}</td>
+                    <td>{e.type}</td>
+                    <td>{e.category}</td>
+                    <td>{e.description}</td>
+                    <td>${e.actual}</td>
+                  </tr>
+                ) : null
+              )}
             </tbody>
           </table>
 
