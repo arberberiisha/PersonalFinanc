@@ -26,6 +26,9 @@
   "expense": "Shpenzime",
   "aiUnavailableTitle": "Shërbimi AI Nuk Është i Disponueshëm",
   "aiUnavailableMessage": "Skano Faturën (AI - Inteligjencë Artificiale) nuk është aktualisht i disponueshëm. Ju lutemi provoni më vonë.",
+  "edit":"✏️ Ndrysho",
+  "delete":"🗑️ Fshij",
+  "save":"Ruaj",
   "months": [
     "Janar",
     "Shkurt",

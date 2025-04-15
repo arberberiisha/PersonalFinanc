@@ -1,6 +1,10 @@
 import html2pdf from "html2pdf.js";
 
-export const exportToPDF = ({ element, darkMode }) => {
+export const exportToPDF = ({
+  element,
+  darkMode,
+  fileName = "finance-report",
+}) => {
   const originalDark = darkMode;
   document.body.classList.remove("dark-mode");
   const toHide = element.querySelectorAll(".no-print");
@@ -8,7 +12,7 @@ export const exportToPDF = ({ element, darkMode }) => {
 
   const options = {
     margin: 0.5,
-    filename: "finance-report.pdf",
+    filename: `${fileName}.pdf`, // use dynamic name
     image: { type: "jpeg", quality: 0.98 },
     html2canvas: { scale: 2, useCORS: true },
     jsPDF: { unit: "in", format: "letter", orientation: "portrait" },

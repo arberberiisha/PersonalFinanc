@@ -1,7 +1,12 @@
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 
-export const exportToExcel = async ({ entries, totals, title }) => {
+export const exportToExcel = async ({
+  entries,
+  totals,
+  title,
+  fileName = "finance-report",
+}) => {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("Finance Report");
 
@@ -11,7 +16,13 @@ export const exportToExcel = async ({ entries, totals, title }) => {
   titleCell.font = { size: 16, bold: true };
   titleCell.alignment = { horizontal: "center" };
 
-  const headerRow = sheet.addRow(["Month", "Type", "Category", "Description", "Amount"]);
+  const headerRow = sheet.addRow([
+    "Month",
+    "Type",
+    "Category",
+    "Description",
+    "Amount",
+  ]);
   headerRow.eachCell((cell) => {
     cell.font = { bold: true };
     cell.fill = {
@@ -28,7 +39,13 @@ export const exportToExcel = async ({ entries, totals, title }) => {
   });
 
   entries.forEach((e) => {
-    sheet.addRow([e.month, e.type, e.category, e.description, Number(e.actual)]);
+    sheet.addRow([
+      e.month,
+      e.type,
+      e.category,
+      e.description,
+      Number(e.actual),
+    ]);
   });
 
   sheet.addRow([]);
@@ -41,5 +58,5 @@ export const exportToExcel = async ({ entries, totals, title }) => {
   const blob = new Blob([buffer], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
-  saveAs(blob, "finance-report.xlsx");
+  saveAs(blob, `${fileName}.xlsx`);
 };

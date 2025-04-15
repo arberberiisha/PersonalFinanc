@@ -9,17 +9,38 @@ import { showError } from "./utils/showError";
 import "./App.css";
 
 export default function PersonalFinanceTracker() {
-
   const { translations: t, language, setLanguage } = useTranslations();
-  
+
+  const getSavedMonth = () => localStorage.getItem("lastMonth");
+
   const monthNames = {
     en: [
-      "January", "February", "March", "April", "May", "June",
-      "July", "August", "September", "October", "November", "December",
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
     ],
     sq: [
-      "Janar", "Shkurt", "Mars", "Prill", "Maj", "Qershor",
-      "Korrik", "Gusht", "Shtator", "Tetor", "Nëntor", "Dhjetor",
+      "Janar",
+      "Shkurt",
+      "Mars",
+      "Prill",
+      "Maj",
+      "Qershor",
+      "Korrik",
+      "Gusht",
+      "Shtator",
+      "Tetor",
+      "Nëntor",
+      "Dhjetor",
     ],
   };
 
@@ -31,14 +52,15 @@ export default function PersonalFinanceTracker() {
 
   const [entries, setEntries] = useState([]);
   const [darkMode, setDarkMode] = useState(false);
-  
-  const [form, setForm] = useState({
+
+  const [form, setForm] = useState(() => ({
     type: "Expense",
     category: "",
     description: "",
     actual: "",
-    month: getCurrentMonth(language),
-  });
+    month: getSavedMonth() || getCurrentMonth(language),
+    year: new Date().getFullYear(), // default to current year
+  }));
 
   const pdfRef = useRef();
   const imageInputRef = useRef();
@@ -54,19 +76,26 @@ export default function PersonalFinanceTracker() {
 
   const addEntry = () => {
     if (form.actual && form.category) {
-      setEntries([...entries, {
-        ...form,
-        actual: Number(form.actual),
-        description: form.description || "",
-      }]);
+      setEntries([
+        ...entries,
+        {
+          ...form,
+          actual: Number(form.actual),
+          description: form.description || "",
+        },
+      ]);
+
       setForm({
         type: "Expense",
         category: "",
         description: "",
         actual: "",
-        month: getCurrentMonth(),
+        month: form.month,
+        year: form.year,
       });
     }
+
+    localStorage.setItem("lastMonth", form.month);
   };
 
   const totalIncome = entries
@@ -107,9 +136,16 @@ export default function PersonalFinanceTracker() {
     const newEntries = [];
     worksheet.eachRow((row, rowNumber) => {
       if (rowNumber <= 2) return;
-    
+
       const [month, type, category, description, actual] = row.values.slice(1);
-      if (month && type && category && description && actual && !isNaN(actual)) {
+      if (
+        month &&
+        type &&
+        category &&
+        description &&
+        actual &&
+        !isNaN(actual)
+      ) {
         newEntries.push({
           month,
           type,
@@ -127,17 +163,80 @@ export default function PersonalFinanceTracker() {
   const handleBillImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-  
+
     try {
       await uploadBillImage({ file, setEntries });
     } catch (err) {
       console.error("Bill analysis failed:", err);
       showError(t.aiUnavailableTitle, t.aiUnavailableMessage);
     } finally {
-      // Always reset the input so re-selecting the same file works
       if (imageInputRef.current) {
         imageInputRef.current.value = null;
       }
+    }
+  };
+
+  const handleEdit = async (index) => {
+    const entry = entries[index];
+
+    const { value: updated } = await Swal.fire({
+      title: t.editEntry,
+      html: `
+        <input id="swal-type" class="swal2-input" placeholder="${t.type}" value="${entry.type}">
+        <input id="swal-month" class="swal2-input" placeholder="${t.month}" value="${entry.month}">
+        <input id="swal-category" class="swal2-input" placeholder="${t.category}" value="${entry.category}">
+        <input id="swal-description" class="swal2-input" placeholder="${t.description}" value="${entry.description}">
+        <input id="swal-actual" type="number" class="swal2-input" placeholder="${t.amount}" value="${entry.actual}">
+      `,
+      showCancelButton: true,
+      confirmButtonText: t.save,
+      preConfirm: () => {
+        const type = document.getElementById("swal-type").value;
+        const month = document.getElementById("swal-month").value;
+        const category = document.getElementById("swal-category").value;
+        const description = document.getElementById("swal-description").value;
+        const actual = parseFloat(document.getElementById("swal-actual").value);
+
+        if (!type || !month || !category || isNaN(actual)) {
+          Swal.showValidationMessage(
+            t.invalidInput || "Please fill in all fields."
+          );
+          return;
+        }
+
+        return { type, month, category, description, actual };
+      },
+    });
+
+    if (updated) {
+      const updatedEntries = [...entries];
+      updatedEntries[index] = updated;
+      setEntries(updatedEntries);
+      Swal.fire(
+        t.updated || "Updated!",
+        t.updatedMessage || "Your entry has been updated.",
+        "success"
+      );
+    }
+  };
+
+  const handleDelete = async (index) => {
+    const result = await Swal.fire({
+      title: t.deleteConfirmTitle || "Are you sure?",
+      text: t.deleteConfirmText || "You won't be able to revert this!",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: t.confirm || "Yes, delete it!",
+    });
+
+    if (result.isConfirmed) {
+      const updatedEntries = entries.filter((_, i) => i !== index);
+      setEntries(updatedEntries);
+      Swal.fire(
+        t.deleted || "Deleted!",
+        t.deletedMessage || "Entry has been removed.",
+        "success"
+      );
     }
   };
 
@@ -156,7 +255,7 @@ export default function PersonalFinanceTracker() {
               >
                 {darkMode ? t.lightMode : t.darkMode}
               </button>
-              
+
               <button
                 className="btn btn-outline-secondary no-print"
                 onClick={() => setLanguage(language === "en" ? "sq" : "en")}
@@ -208,7 +307,7 @@ export default function PersonalFinanceTracker() {
                 <option>{t.expense}</option>
               </select>
             </div>
-            <div className="col-md-2">
+            <div className="col-md-2 d-flex gap-1 align-items-center">
               <select
                 className="form-select"
                 value={form.month}
@@ -218,7 +317,24 @@ export default function PersonalFinanceTracker() {
                   <option key={index}>{month}</option>
                 ))}
               </select>
+
+              <input
+                type="number"
+                min="1900"
+                max="2100"
+                className="form-control"
+                style={{ maxWidth: "80px" }}
+                placeholder="Year"
+                value={form.year ?? ""}
+                onChange={(e) =>
+                  handleChange(
+                    "year",
+                    e.target.value ? parseInt(e.target.value) : null
+                  )
+                }
+              />
             </div>
+
             <div className="col-md-2">
               <input
                 className="form-control"
@@ -262,17 +378,32 @@ export default function PersonalFinanceTracker() {
               </tr>
             </thead>
             <tbody>
-              {entries.map((e, i) =>
-                e ? (
-                  <tr key={i}>
-                    <td>{e.month}</td>
-                    <td>{e.type}</td>
-                    <td>{e.category}</td>
-                    <td>{e.description}</td>
-                    <td>${e.actual}</td>
-                  </tr>
-                ) : null
-              )}
+              {entries.map((e, i) => (
+                <tr key={i}>
+                  <td>
+                    {e.month}
+                    {e.year ? ` ${e.year}` : ""}
+                  </td>
+                  <td>{e.type}</td>
+                  <td>{e.category}</td>
+                  <td>{e.description}</td>
+                  <td>${e.actual}</td>
+                  <td className="no-print">
+                    <button
+                      className="btn btn-sm btn-warning me-2"
+                      onClick={() => handleEdit(i)}
+                    >
+                      {t.edit}
+                    </button>
+                    <button
+                      className="btn btn-sm btn-danger"
+                      onClick={() => handleDelete(i)}
+                    >
+                      {t.delete}
+                    </button>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
 
@@ -295,26 +426,51 @@ export default function PersonalFinanceTracker() {
       <div className="container d-flex gap-3 mt-3 mb-3">
         <button
           className="btn btn-primary"
-          onClick={() => exportToPDF({ element: pdfRef.current, darkMode })}
+          onClick={async () => {
+            const { value: fileName } = await Swal.fire({
+              title: t.enterFileName || "Enter file name",
+              input: "text",
+              inputPlaceholder: "finance-report",
+              showCancelButton: true,
+              confirmButtonText: t.exportPDF,
+            });
+
+            if (fileName) {
+              exportToPDF({ element: pdfRef.current, darkMode, fileName });
+            }
+          }}
         >
           {t.exportPDF}
         </button>
+
         <button
           className="btn btn-success"
-          onClick={() =>
-            exportToExcel({
-              entries,
-              totals: {
-                income: totalIncome,
-                expense: totalExpense,
-                balance,
-              },
-              title: t.title,
-            })
-          }
+          onClick={async () => {
+            const { value: fileName } = await Swal.fire({
+              title: t.enterFileName || "Enter file name",
+              input: "text",
+              inputPlaceholder: "finance-report",
+              showCancelButton: true,
+              confirmButtonText: t.exportExcel,
+            });
+
+            if (fileName) {
+              exportToExcel({
+                entries,
+                totals: {
+                  income: totalIncome,
+                  expense: totalExpense,
+                  balance,
+                },
+                title: t.title,
+                fileName,
+              });
+            }
+          }}
         >
           {t.exportExcel}
         </button>
+
         <button className="btn btn-outline-danger" onClick={clearAllEntries}>
           {t.clearAll}
         </button>

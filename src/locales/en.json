@@ -26,6 +26,9 @@
   "expense": "Expense",
   "aiUnavailableTitle": "AI Service Unavailable",
   "aiUnavailableMessage": "Scan Bill (AI) is currently not available. Please try again later.",
+  "edit":"✏️ Edit",
+  "delete":"🗑️ Delete",
+  "save":"Save",
   "months": [
     "January",
     "February",
