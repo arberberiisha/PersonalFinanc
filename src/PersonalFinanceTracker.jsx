@@ -125,40 +125,62 @@ export default function PersonalFinanceTracker() {
   };
 
   const handleFileUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+  
     const ExcelJS = await import("exceljs");
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(await file.arrayBuffer());
-    const worksheet = workbook.getWorksheet(1);
-
-    const newEntries = [];
-    worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber <= 2) return;
-
-      const [month, type, category, description, actual] = row.values.slice(1);
-      if (
-        month &&
-        type &&
-        category &&
-        description &&
-        actual &&
-        !isNaN(actual)
-      ) {
-        newEntries.push({
-          month,
-          type,
-          category,
-          description,
-          actual: Number(actual),
-        });
-      }
-    });
-
-    setEntries((prev) => [...prev, ...newEntries]);
+    const allEntries = [];
+  
+    for (const file of files) {
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(await file.arrayBuffer());
+      const worksheet = workbook.getWorksheet(1);
+      const headerRow = worksheet.getRow(2);
+      const headers = headerRow.values.map((h) =>
+        h?.toString()?.toLowerCase()?.trim()
+      );
+  
+      const getColIndex = (name) =>
+        headers.findIndex((h) => h === name.toLowerCase());
+  
+      const colMonth = getColIndex("month");
+      const colYear = getColIndex("year");
+      const colType = getColIndex("type");
+      const colCategory = getColIndex("category");
+      const colDescription = getColIndex("description");
+      const colActual = getColIndex("amount");
+  
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber <= 2) return;
+  
+        const values = row.values;
+        const month = values[colMonth];
+        const year = values[colYear];
+        const type = values[colType];
+        const category = values[colCategory];
+        const description = values[colDescription];
+        const actual = values[colActual];
+  
+        if (month && type && category && actual && !isNaN(actual)) {
+          allEntries.push({
+            month: month.toString(),
+            year: year ? parseInt(year) : null,
+            type,
+            category,
+            description: description || "",
+            actual: Number(actual),
+          });
+        }
+      });
+    }
+  
+    setEntries((prev) =>
+      sortEntries([...prev, ...allEntries], language, monthNames, sortBy, sortDirection)
+    );
+  
     if (excelInputRef.current) excelInputRef.current.value = null;
   };
+  
 
   const handleBillImageUpload = async (e) => {
     const file = e.target.files[0];
@@ -240,6 +262,58 @@ export default function PersonalFinanceTracker() {
     }
   };
 
+  const sortEntries = (entries, language, monthNames, sortBy, direction) => {
+    const getMonthIndex = (month) => monthNames[language].indexOf(month);
+
+    return [...entries].sort((a, b) => {
+      // Default: year + month ordering
+      const yearA = a.year ?? 0;
+      const yearB = b.year ?? 0;
+      const monthA = getMonthIndex(a.month);
+      const monthB = getMonthIndex(b.month);
+
+      if (yearA !== yearB) return yearA - yearB;
+      if (monthA !== monthB) return monthA - monthB;
+
+      // Apply custom sort if selected
+      if (sortBy) {
+        let aValue = a[sortBy];
+        let bValue = b[sortBy];
+
+        if (typeof aValue === "string") aValue = aValue.toLowerCase();
+        if (typeof bValue === "string") bValue = bValue.toLowerCase();
+
+        if (aValue < bValue) return direction === "asc" ? -1 : 1;
+        if (aValue > bValue) return direction === "asc" ? 1 : -1;
+      }
+
+      return 0;
+    });
+  };
+
+  const [sortBy, setSortBy] = useState(null); // e.g., "actual", "type"
+  const [sortDirection, setSortDirection] = useState("asc");
+  const [perPage, setPerPage] = useState(20);
+  const [page, setPage] = useState(1);
+
+  const sorted = sortEntries(
+    entries,
+    language,
+    monthNames,
+    sortBy,
+    sortDirection
+  );
+  const paginated = sorted.slice((page - 1) * perPage, page * perPage);
+
+  const toggleSort = (field) => {
+    if (sortBy === field) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(field);
+      setSortDirection("asc");
+    }
+  };
+
   return (
     <>
       <div ref={pdfRef}>
@@ -266,13 +340,14 @@ export default function PersonalFinanceTracker() {
           </div>
 
           <div className="d-flex flex-wrap gap-3 justify-content-center mb-1 mt-5 no-print">
-            <input
-              type="file"
-              accept=".xlsx"
-              ref={excelInputRef}
-              style={{ display: "none" }}
-              onChange={handleFileUpload}
-            />
+          <input
+  type="file"
+  accept=".xlsx"
+  multiple
+  ref={excelInputRef}
+  style={{ display: "none" }}
+  onChange={handleFileUpload}
+/>
             <input
               type="file"
               accept="image/*"
@@ -370,15 +445,17 @@ export default function PersonalFinanceTracker() {
           <table className="table table-bordered table-striped">
             <thead>
               <tr>
-                <th>{t.month}</th>
-                <th>{t.type}</th>
-                <th>{t.category}</th>
-                <th>{t.description}</th>
-                <th>{t.amount}</th>
+                <th onClick={() => toggleSort("month")}>{t.month}</th>
+                <th onClick={() => toggleSort("type")}>{t.type}</th>
+                <th onClick={() => toggleSort("category")}>{t.category}</th>
+                <th onClick={() => toggleSort("description")}>
+                  {t.description}
+                </th>
+                <th onClick={() => toggleSort("actual")}>{t.amount}</th>
               </tr>
             </thead>
             <tbody>
-              {entries.map((e, i) => (
+              {paginated.map((e, i) => (
                 <tr key={i}>
                   <td>
                     {e.month}
@@ -406,6 +483,49 @@ export default function PersonalFinanceTracker() {
               ))}
             </tbody>
           </table>
+          <div className="mt-2 text-muted small">
+            {t.totalEntries || "Total entries"}:{" "}
+            <strong>{entries.length}</strong>
+          </div>
+          <div className="d-flex align-items-center gap-3 flex-wrap mt-3">
+            <label className="mb-0">
+              {t.entriesPerPage || "Entries per page:"}
+            </label>
+            <select
+              className="form-select form-select-sm w-auto"
+              value={perPage}
+              onChange={(e) => {
+                setPerPage(Number(e.target.value));
+                setPage(1);
+              }}
+            >
+              {[10, 20, 50, 100].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+
+            <div className="d-flex align-items-center gap-2 ms-auto">
+              <button
+                className="btn btn-sm btn-outline-secondary"
+                disabled={page === 1}
+                onClick={() => setPage(page - 1)}
+              >
+                ◀
+              </button>
+              <span>
+                {page} / {Math.max(1, Math.ceil(sorted.length / perPage))}
+              </span>
+              <button
+                className="btn btn-sm btn-outline-secondary"
+                disabled={page >= Math.ceil(sorted.length / perPage)}
+                onClick={() => setPage(page + 1)}
+              >
+                ▶
+              </button>
+            </div>
+          </div>
 
           <div className="mt-4">
             <p>
