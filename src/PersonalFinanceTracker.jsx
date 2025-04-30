@@ -468,13 +468,13 @@ export default function PersonalFinanceTracker() {
                   <td className="no-print">
                     <button
                       className="btn btn-sm btn-warning me-2"
-                      onClick={() => handleEdit(i+1)}
+                      onClick={() => handleEdit(i)}
                     >
                       {t.edit}
                     </button>
                     <button
                       className="btn btn-sm btn-danger"
-                      onClick={() => handleDelete(i+1)}
+                      onClick={() => handleDelete(i)}
                     >
                       {t.delete}
                     </button>
