@@ -127,10 +127,10 @@ export default function PersonalFinanceTracker() {
   const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
-  
+
     const ExcelJS = await import("exceljs");
     const allEntries = [];
-  
+
     for (const file of files) {
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(await file.arrayBuffer());
@@ -139,20 +139,20 @@ export default function PersonalFinanceTracker() {
       const headers = headerRow.values.map((h) =>
         h?.toString()?.toLowerCase()?.trim()
       );
-  
+
       const getColIndex = (name) =>
         headers.findIndex((h) => h === name.toLowerCase());
-  
+
       const colMonth = getColIndex("month");
       const colYear = getColIndex("year");
       const colType = getColIndex("type");
       const colCategory = getColIndex("category");
       const colDescription = getColIndex("description");
       const colActual = getColIndex("amount");
-  
+
       worksheet.eachRow((row, rowNumber) => {
         if (rowNumber <= 2) return;
-  
+
         const values = row.values;
         const month = values[colMonth];
         const year = values[colYear];
@@ -160,7 +160,7 @@ export default function PersonalFinanceTracker() {
         const category = values[colCategory];
         const description = values[colDescription];
         const actual = values[colActual];
-  
+
         if (month && type && category && actual && !isNaN(actual)) {
           allEntries.push({
             month: month.toString(),
@@ -173,14 +173,19 @@ export default function PersonalFinanceTracker() {
         }
       });
     }
-  
+
     setEntries((prev) =>
-      sortEntries([...prev, ...allEntries], language, monthNames, sortBy, sortDirection)
+      sortEntries(
+        [...prev, ...allEntries],
+        language,
+        monthNames,
+        sortBy,
+        sortDirection
+      )
     );
-  
+
     if (excelInputRef.current) excelInputRef.current.value = null;
   };
-  
 
   const handleBillImageUpload = async (e) => {
     const file = e.target.files[0];
@@ -340,14 +345,14 @@ export default function PersonalFinanceTracker() {
           </div>
 
           <div className="d-flex flex-wrap gap-3 justify-content-center mb-1 mt-5 no-print">
-          <input
-  type="file"
-  accept=".xlsx"
-  multiple
-  ref={excelInputRef}
-  style={{ display: "none" }}
-  onChange={handleFileUpload}
-/>
+            <input
+              type="file"
+              accept=".xlsx"
+              multiple
+              ref={excelInputRef}
+              style={{ display: "none" }}
+              onChange={handleFileUpload}
+            />
             <input
               type="file"
               accept="image/*"
@@ -372,7 +377,7 @@ export default function PersonalFinanceTracker() {
 
         <div className="container py-3">
           <div className="no-print row g-3 mb-4">
-            <div className="col-md-2">
+            <div className="col-12 col-md-2">
               <select
                 className="form-select"
                 value={form.type}
@@ -382,7 +387,8 @@ export default function PersonalFinanceTracker() {
                 <option>{t.expense}</option>
               </select>
             </div>
-            <div className="col-md-2 d-flex gap-1 align-items-center">
+
+            <div className="col-12 col-md-2 d-flex flex-column flex-md-row gap-1 align-items-stretch">
               <select
                 className="form-select"
                 value={form.month}
@@ -398,7 +404,6 @@ export default function PersonalFinanceTracker() {
                 min="1900"
                 max="2100"
                 className="form-control"
-                style={{ maxWidth: "80px" }}
                 placeholder="Year"
                 value={form.year ?? ""}
                 onChange={(e) =>
@@ -410,7 +415,7 @@ export default function PersonalFinanceTracker() {
               />
             </div>
 
-            <div className="col-md-2">
+            <div className="col-12 col-md-2">
               <input
                 className="form-control"
                 placeholder={t.category}
@@ -418,7 +423,8 @@ export default function PersonalFinanceTracker() {
                 onChange={(e) => handleChange("category", e.target.value)}
               />
             </div>
-            <div className="col-md-2">
+
+            <div className="col-12 col-md-2">
               <input
                 className="form-control"
                 placeholder={t.description}
@@ -426,7 +432,8 @@ export default function PersonalFinanceTracker() {
                 onChange={(e) => handleChange("description", e.target.value)}
               />
             </div>
-            <div className="col-md-2">
+
+            <div className="col-12 col-md-2">
               <input
                 type="number"
                 className="form-control"
@@ -435,54 +442,57 @@ export default function PersonalFinanceTracker() {
                 onChange={(e) => handleChange("actual", e.target.value)}
               />
             </div>
-            <div className="col-md-2">
+
+            <div className="col-12 col-md-2">
               <button className="btn btn-danger w-100" onClick={addEntry}>
                 {t.addEntry}
               </button>
             </div>
           </div>
 
-          <table className="table table-bordered table-striped">
-            <thead>
-              <tr>
-                <th onClick={() => toggleSort("month")}>{t.month}</th>
-                <th onClick={() => toggleSort("type")}>{t.type}</th>
-                <th onClick={() => toggleSort("category")}>{t.category}</th>
-                <th onClick={() => toggleSort("description")}>
-                  {t.description}
-                </th>
-                <th onClick={() => toggleSort("actual")}>{t.amount}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginated.map((e, i) => (
-                <tr key={i}>
-                  <td>
-                    {e.month}
-                    {e.year ? ` ${e.year}` : ""}
-                  </td>
-                  <td>{e.type}</td>
-                  <td>{e.category}</td>
-                  <td>{e.description}</td>
-                  <td>${e.actual}</td>
-                  <td className="no-print">
-                    <button
-                      className="btn btn-sm btn-warning me-2"
-                      onClick={() => handleEdit(i)}
-                    >
-                      {t.edit}
-                    </button>
-                    <button
-                      className="btn btn-sm btn-danger"
-                      onClick={() => handleDelete(i)}
-                    >
-                      {t.delete}
-                    </button>
-                  </td>
+          <div className="table-responsive">
+            <table className="table table-bordered table-striped">
+              <thead>
+                <tr>
+                  <th onClick={() => toggleSort("month")}>{t.month}</th>
+                  <th onClick={() => toggleSort("type")}>{t.type}</th>
+                  <th onClick={() => toggleSort("category")}>{t.category}</th>
+                  <th onClick={() => toggleSort("description")}>
+                    {t.description}
+                  </th>
+                  <th onClick={() => toggleSort("actual")}>{t.amount}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {paginated.map((e, i) => (
+                  <tr key={i}>
+                    <td>
+                      {e.month}
+                      {e.year ? ` ${e.year}` : ""}
+                    </td>
+                    <td>{e.type}</td>
+                    <td>{e.category}</td>
+                    <td>{e.description}</td>
+                    <td>${e.actual}</td>
+                    <td className="no-print">
+                      <button
+                        className="btn btn-sm btn-warning me-2"
+                        onClick={() => handleEdit(i)}
+                      >
+                        {t.edit}
+                      </button>
+                      <button
+                        className="btn btn-sm btn-danger"
+                        onClick={() => handleDelete(i)}
+                      >
+                        {t.delete}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <div className="mt-2 text-muted small">
             {t.totalEntries || "Total entries"}:{" "}
             <strong>{entries.length}</strong>
@@ -543,7 +553,7 @@ export default function PersonalFinanceTracker() {
         </div>
       </div>
 
-      <div className="container d-flex gap-3 mt-3 mb-3">
+      <div className="container d-flex flex-column flex-md-row gap-3 mt-3 mb-3">
         <button
           className="btn btn-primary"
           onClick={async () => {

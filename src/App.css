@@ -55,3 +55,43 @@ body.dark-mode .table thead {
   background-color: #333 !important;
   color: #fff !important;
 }
+
+/* Mobile layout improvements */
+@media (max-width: 768px) {
+  h1 {
+    font-size: 1.8rem !important;
+  }
+
+  h2 {
+    font-size: 1.5rem !important;
+  }
+
+  .btn {
+    font-size: 0.95rem !important;
+    padding: 0.5rem 1rem !important;
+  }
+
+  .form-select,
+  .form-control {
+    font-size: 0.95rem !important;
+  }
+
+  .table {
+    font-size: 0.85rem;
+  }
+
+  .no-print.row.g-3.mb-4 > div {
+    margin-bottom: 1rem;
+  }
+
+  .container {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+}
+
+/* Make table scrollable on small screens */
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
