@@ -464,32 +464,37 @@ export default function PersonalFinanceTracker() {
                 </tr>
               </thead>
               <tbody>
-                {paginated.map((e, i) => (
-                  <tr key={i}>
-                    <td>
-                      {e.month}
-                      {e.year ? ` ${e.year}` : ""}
-                    </td>
-                    <td>{e.type}</td>
-                    <td>{e.category}</td>
-                    <td>{e.description}</td>
-                    <td>${e.actual}</td>
-                    <td className="no-print">
-                      <button
-                        className="btn btn-sm btn-warning me-2"
-                        onClick={() => handleEdit(i)}
-                      >
-                        {t.edit}
-                      </button>
-                      <button
-                        className="btn btn-sm btn-danger"
-                        onClick={() => handleDelete(i)}
-                      >
-                        {t.delete}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {paginated.map((e, i) => {
+                  const globalIndex = entries.indexOf(
+                    sorted[(page - 1) * perPage + i]
+                  );
+                  return (
+                    <tr key={i}>
+                      <td>
+                        {e.month}
+                        {e.year ? ` ${e.year}` : ""}
+                      </td>
+                      <td>{e.type}</td>
+                      <td>{e.category}</td>
+                      <td>{e.description}</td>
+                      <td>${e.actual}</td>
+                      <td className="no-print">
+                        <button
+                          className="btn btn-sm btn-warning me-2"
+                          onClick={() => handleEdit(globalIndex)}
+                        >
+                          {t.edit}
+                        </button>
+                        <button
+                          className="btn btn-sm btn-danger"
+                          onClick={() => handleDelete(globalIndex)}
+                        >
+                          {t.delete}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

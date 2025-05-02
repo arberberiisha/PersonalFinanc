@@ -10,7 +10,7 @@ export const exportToExcel = async ({
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("Finance Report");
 
-  sheet.mergeCells("A1", "E1");
+  sheet.mergeCells("A1", "F1");
   const titleCell = sheet.getCell("A1");
   titleCell.value = title;
   titleCell.font = { size: 16, bold: true };
@@ -18,6 +18,7 @@ export const exportToExcel = async ({
 
   const headerRow = sheet.addRow([
     "Month",
+    "Year",
     "Type",
     "Category",
     "Description",
@@ -41,17 +42,19 @@ export const exportToExcel = async ({
   entries.forEach((e) => {
     sheet.addRow([
       e.month,
+      e.year ?? "",
       e.type,
       e.category,
-      e.description,
+      e.description || "",
       Number(e.actual),
     ]);
   });
 
   sheet.addRow([]);
-  sheet.addRow(["Total Income", "", "", "", totals.income]);
-  sheet.addRow(["Total Expense", "", "", "", totals.expense]);
-  sheet.addRow(["Balance", "", "", "", totals.balance]);
+  sheet.addRow(["Total Income", "", "", "", "", totals.income]);
+  sheet.addRow(["Total Expense", "", "", "", "", totals.expense]);
+  sheet.addRow(["Balance", "", "", "", "", totals.balance]);
+
   sheet.columns.forEach((col) => (col.width = 20));
 
   const buffer = await workbook.xlsx.writeBuffer();
