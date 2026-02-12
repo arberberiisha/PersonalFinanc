@@ -65,6 +65,7 @@ const BillGenerator = () => {
     const isSq = language === "sq";
     const primaryPurple = [79, 70, 229];
 
+    // Date logic
     const dateObj = new Date(invoice.date);
     const day = dateObj.getDate();
     const monthIndex = dateObj.getMonth();
@@ -76,6 +77,7 @@ const BillGenerator = () => {
       : `${monthTranslated} ${day}, ${year}`;
 
     const labels = {
+      title: isSq ? "FATURË" : "INVOICE",
       inv: isSq ? "NO:" : "NO:",
       date: isSq ? "Data:" : "Date:",
       billedTo: isSq ? "Faturuar për:" : "Billed to:",
@@ -89,22 +91,33 @@ const BillGenerator = () => {
       note: isSq ? "Shënim:" : "Note:"
     };
 
-    doc.setFontSize(10); doc.setTextColor(100);
-    doc.text(invoice.senderName.toUpperCase(), margin, 20);
+    // 1. RESTORED LARGE HEADER TITLE (Matches image_4dfb3b.png)
+    doc.setFontSize(22);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...primaryPurple);
+    doc.text(labels.title, margin, 20);
+
+    // Metadata Right Aligned
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.setFont("helvetica", "normal");
     doc.text(`${labels.inv} ${invoice.invoiceNumber}`, pageWidth - margin, 20, { align: "right" });
 
+    // 2. LOGO & DECORATIVE LINES (Restored as per image_4f4958.png)
     if (invoice.logo) {
       try {
-        doc.addImage(invoice.logo, "PNG", margin, 25, 20, 15);
+        doc.addImage(invoice.logo, "PNG", margin, 25, 25, 15);
       } catch (e) {}
     }
     
+    // Decorative lines next to logo/below title
     doc.setDrawColor(230);
-    for (let i = 0; i < 6; i++) doc.line(40, 27 + (i * 2.2), 110, 27 + (i * 2.2));
+    for (let i = 0; i < 6; i++) doc.line(45, 27 + (i * 2.2), 110, 27 + (i * 2.2));
 
     doc.setFont("helvetica", "bold"); doc.setTextColor(0);
     doc.text(`${labels.date} ${formattedDate}`, margin, 50);
 
+    // 3. Address Columns
     const infoY = 60;
     doc.setTextColor(...primaryPurple); doc.text(labels.billedTo, margin, infoY);
     doc.text(labels.from, pageWidth / 2 + 10, infoY);
@@ -154,47 +167,43 @@ const BillGenerator = () => {
     doc.text(labels.due, pageWidth - 90, finalY + 8);
     doc.setTextColor(0); doc.text(`€ ${calculateTotal().toFixed(2)}`, pageWidth - margin - 5, finalY + 8, { align: "right" });
 
+    // Footer
+    doc.setFontSize(10);
+    if (invoice.paymentMethod) {
+      doc.setFont("helvetica", "bold"); doc.text(labels.payment, margin, finalY + 20);
+      doc.setFont("helvetica", "normal"); doc.text(invoice.paymentMethod, margin + 35, finalY + 20);
+    }
+    if (invoice.notes) {
+      doc.setFont("helvetica", "bold"); doc.text(labels.note, margin, finalY + 27);
+      doc.setFont("helvetica", "normal"); doc.text(invoice.notes, margin + (isSq ? 15 : 12), finalY + 27);
+    }
+
     doc.save(`Invoice_${invoice.invoiceNumber}.pdf`);
   };
 
   return (
     <div className="dashboard-card p-4 p-md-5">
-      {/* HEADER SECTION WITH LOGO RESTORED */}
-      <div className="d-flex flex-column flex-md-row justify-content-between align-items-start mb-5 border-bottom pb-4 gap-4">
-        <div className="w-100">
+      <div className="d-flex justify-content-between border-bottom pb-4 mb-5">
+        <div>
           <div className="mb-3">
             <input type="file" accept="image/*" ref={logoInputRef} style={{ display: "none" }} onChange={handleLogoUpload} />
             {invoice.logo ? (
-              <div 
-                className="position-relative d-inline-block" 
-                onMouseEnter={() => setLogoHover(true)} 
-                onMouseLeave={() => setLogoHover(false)}
-              >
+              <div className="position-relative d-inline-block" onMouseEnter={() => setLogoHover(true)} onMouseLeave={() => setLogoHover(false)}>
                 <img src={invoice.logo} alt="Logo" style={{ maxHeight: "80px", objectFit: "contain" }} />
                 {logoHover && (
-                  <button 
-                    className="btn btn-sm btn-danger position-absolute top-0 start-100 translate-middle rounded-circle p-0 no-print" 
-                    style={{ width: "20px", height: "20px" }} 
-                    onClick={() => setInvoice({ ...invoice, logo: null })}
-                  >
-                    ×
-                  </button>
+                  <button className="btn btn-sm btn-danger position-absolute top-0 start-100 translate-middle rounded-circle p-0 no-print" style={{ width: "20px", height: "20px" }} onClick={() => setInvoice({ ...invoice, logo: null })}>×</button>
                 )}
               </div>
             ) : (
-              <div 
-                className="no-print d-flex align-items-center gap-2 text-muted border rounded px-3 py-3 bg-light small" 
-                onClick={() => logoInputRef.current.click()} 
-                style={{ cursor: "pointer", borderStyle: "dashed", width: "fit-content" }}
-              >
+              <div className="no-print d-flex align-items-center gap-2 text-muted border rounded px-3 py-3 bg-light small" onClick={() => logoInputRef.current.click()} style={{ cursor: "pointer", borderStyle: "dashed", width: "fit-content" }}>
                 <ImageIcon size={20} /> {t.uploadLogo || "Upload Logo"}
               </div>
             )}
           </div>
-          <h2 className="fw-bold text-primary mb-0"><Receipt className="me-2" />{t.invoiceTitle}</h2>
+          <h2 className="fw-bold text-primary mb-0">{t.invoiceTitle}</h2>
         </div>
-        <div className="text-md-end w-100">
-          <label className="text-muted small fw-bold text-uppercase d-block mb-1">TOTAL DUE</label>
+        <div className="text-end">
+          <label className="text-muted small fw-bold">TOTAL AMOUNT</label>
           <h2 className="fw-bold display-5 text-dark mb-0">€{calculateTotal().toFixed(2)}</h2>
         </div>
       </div>
@@ -211,14 +220,12 @@ const BillGenerator = () => {
             <input type="date" className="form-control border-0" value={invoice.date} onChange={e => setInvoice({...invoice, date: e.target.value})} />
           </div>
         </div>
-        
         <div className="col-md-4">
           <label className="small fw-bold text-muted uppercase">From</label>
           <input type="text" className="form-control mb-1 border-0 bg-light shadow-sm" placeholder="Your Name" value={invoice.senderName} onChange={e => setInvoice({...invoice, senderName: e.target.value})} />
           <input type="text" className="form-control mb-1 border-0 bg-light shadow-sm" placeholder="Address" value={invoice.senderAddress} onChange={e => setInvoice({...invoice, senderAddress: e.target.value})} />
           <input type="email" className="form-control border-0 bg-light shadow-sm" placeholder="Your Email" value={invoice.senderEmail} onChange={e => setInvoice({...invoice, senderEmail: e.target.value})} />
         </div>
-        
         <div className="col-md-4">
           <label className="small fw-bold text-muted uppercase">To</label>
           <input type="text" className="form-control mb-1 border-0 bg-light shadow-sm" placeholder={t.clientName} value={invoice.clientName} onChange={e => setInvoice({...invoice, clientName: e.target.value})} />
@@ -259,7 +266,7 @@ const BillGenerator = () => {
                     </div>
                   </td>
                   <td data-label={t.total} className="fw-bold text-end pe-2">€{(Number(item.quantity) * Number(item.price)).toFixed(2)}</td>
-                  <td className="no-print text-center">
+                  <td className="no-print text-center" style={{ verticalAlign: 'middle' }}>
                     <button className="btn btn-link text-danger p-0" onClick={() => setInvoice({...invoice, items: invoice.items.filter((_, i) => i !== idx)})}><Trash2 size={16}/></button>
                   </td>
                 </motion.tr>
