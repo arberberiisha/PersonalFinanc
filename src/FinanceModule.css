@@ -1,7 +1,7 @@
 /* =========================================
    PERSONAL FINANCE EXCLUSIVE STYLES
    ========================================= */
-.pf-container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+.pf-container { max-width: 1200px; margin: 0 auto; padding: 1rem; overflow-x: hidden; }
 
 .pf-card {
   background: var(--bg-card);
@@ -18,7 +18,7 @@
   grid-template-columns: 1fr 1.2fr 1.5fr 1.5fr 1.2fr auto;
   gap: 12px;
   align-items: center;
-  background: #f8fafc;
+  background: rgba(248, 250, 252, 0.5);
   padding: 12px;
   border-radius: 14px;
   border: 1px solid var(--border-color);
@@ -33,6 +33,7 @@
   display: flex;
   align-items: center;
   padding: 0 10px;
+  height: 44px; /* Standardize height */
 }
 
 .pf-input-wrapper:focus-within {
@@ -40,14 +41,13 @@
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.08);
 }
 
-.pf-input-icon { color: #94a3b8; margin-right: 8px; }
+.pf-input-icon { color: #94a3b8; margin-right: 8px; flex-shrink: 0; }
 
 .pf-field {
   border: none !important;
   background: transparent !important;
   font-size: 0.85rem;
   font-weight: 500;
-  padding: 10px 0;
   width: 100%;
   color: var(--text-main);
 }
@@ -65,6 +65,7 @@
   color: white;
   border: none;
   transition: all 0.2s;
+  flex-shrink: 0;
 }
 
 .pf-add-btn:hover { background: var(--primary-hover); transform: translateY(-1px); }
@@ -77,7 +78,8 @@
   text-transform: uppercase;
   color: var(--text-muted);
   border-bottom: 2px solid var(--border-color);
-  background: #f8fafc;
+  background: rgba(248, 250, 252, 0.8);
+  cursor: pointer;
 }
 .pf-table td { padding: 1rem; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
 
@@ -88,13 +90,62 @@
 .pf-balance-bg { background: rgba(79, 70, 229, 0.1); color: #4f46e5; }
 .pf-badge { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
 
+/* =========================================
+   MOBILE & TABLET RESPONSIVENESS
+   ========================================= */
+
 @media (max-width: 992px) {
-  .pf-action-bar { grid-template-columns: 1fr 1fr; }
-  .pf-add-btn { grid-column: span 2; width: 100%; }
+  .pf-action-bar { 
+    grid-template-columns: 1fr 1fr; /* 2 Column Brick Layout */
+    gap: 10px;
+  }
+  .pf-action-bar .pf-input-wrapper:nth-child(5), /* Description wrapper */
+  .pf-add-btn { 
+    grid-column: span 2; 
+    width: 100%; 
+  }
 }
+
 @media (max-width: 768px) {
   .pf-table thead { display: none; }
-  .pf-table tr { display: block; border: 1px solid var(--border-color); border-radius: 12px; margin-bottom: 1rem; padding: 1rem; }
-  .pf-table td { display: flex; justify-content: space-between; align-items: center; border: none !important; padding: 0.5rem 0 !important; }
-  .pf-table td::before { content: attr(data-label); font-weight: 700; color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; }
+  .pf-table tr { 
+    display: block; 
+    border: 1px solid var(--border-color); 
+    border-radius: 12px; 
+    margin-bottom: 1rem; 
+    padding: 1rem; 
+    background: var(--bg-card);
+  }
+  .pf-table td { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    border: none !important; 
+    padding: 0.6rem 0 !important; 
+    text-align: right;
+  }
+  .pf-table td::before { 
+    content: attr(data-label); 
+    font-weight: 700; 
+    color: var(--text-muted); 
+    font-size: 0.75rem; 
+    text-transform: uppercase;
+    text-align: left;
+  }
+}
+
+@media (max-width: 576px) {
+  .pf-action-bar { 
+    grid-template-columns: 1fr; /* Single Column Stack */
+  }
+  .pf-action-bar .pf-input-wrapper:nth-child(5),
+  .pf-add-btn { 
+    grid-column: span 1; 
+  }
+  .pf-field {
+    font-size: 16px !important; /* Prevents iOS auto-zoom on focus */
+  }
+  .pf-input-wrapper {
+    height: 48px; /* Larger touch target */
+  }
 }

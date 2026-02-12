@@ -3,16 +3,17 @@ import Swal from "sweetalert2";
 import { useTranslations } from "./LanguageContext";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
 } from 'recharts';
 import { 
   FileSpreadsheet, Trash2, Edit3, Plus, FileText, 
   TrendingUp, TrendingDown, DollarSign, Camera, Tag, Calendar
 } from "lucide-react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 import "./FinanceModule.css";
 
-import { exportToPDF } from "./utils/exportToPDF";
 import { exportToExcel } from "./utils/exportToExcel";
 import { uploadBillImage } from "./utils/billUploader";
 import { showError } from "./utils/showError";
@@ -48,7 +49,6 @@ const PersonalFinance = ({ darkMode }) => {
   const [perPage] = useState(20);
   const [page, setPage] = useState(1);
 
-  const pdfRef = useRef();
   const imageInputRef = useRef();
   const excelInputRef = useRef();
 
@@ -90,6 +90,103 @@ const PersonalFinance = ({ darkMode }) => {
     });
     return Object.values(data);
   }, [entries]);
+
+  // --- PROFESSIONAL PDF EXPORT LOGIC ---
+  const handleDownloadFinancePDF = async () => {
+    if (entries.length === 0) {
+      Swal.fire("Info", "No entries to export", "info");
+      return;
+    }
+
+    const { value: fileName } = await Swal.fire({ 
+      title: t.enterFileName, 
+      input: "text",
+      inputValue: `Report_${new Date().getFullYear()}`
+    });
+
+    if (!fileName) return;
+
+    const doc = new jsPDF("p", "mm", "a4");
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 15;
+    const isSq = language === "sq";
+    const primaryPurple = [79, 70, 229];
+
+    // Date Logic
+    const now = new Date();
+    const monthTranslated = monthNames[language][now.getMonth()];
+    const formattedDate = isSq 
+      ? `${now.getDate()} ${monthTranslated}, ${now.getFullYear()}` 
+      : `${monthTranslated} ${now.getDate()}, ${now.getFullYear()}`;
+
+    // 1. Header (Matches Invoice Style)
+    doc.setFontSize(22);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...primaryPurple);
+    doc.text(t.title.toUpperCase(), margin, 20);
+
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.setFont("helvetica", "normal");
+    doc.text(`${t.date}: ${formattedDate}`, pageWidth - margin, 20, { align: "right" });
+
+    // 2. Stats Summary Box
+    const statsY = 35;
+    doc.setFillColor(249, 250, 251);
+    doc.rect(margin, statsY, pageWidth - (margin * 2), 22, "F");
+    
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(100);
+    doc.text(t.totalIncome.toUpperCase(), margin + 5, statsY + 8);
+    doc.text(t.totalExpense.toUpperCase(), (pageWidth / 3) + 10, statsY + 8);
+    doc.text(t.balance.toUpperCase(), (pageWidth * 2 / 3) + 10, statsY + 8);
+
+    doc.setFontSize(12);
+    doc.setTextColor(16, 185, 129); // Green
+    doc.text(`+€${totalIncome.toLocaleString()}`, margin + 5, statsY + 16);
+    doc.setTextColor(239, 68, 68); // Red
+    doc.text(`-€${totalExpense.toLocaleString()}`, (pageWidth / 3) + 10, statsY + 16);
+    doc.setTextColor(...primaryPurple); // Purple
+    doc.text(`€${balance.toLocaleString()}`, (pageWidth * 2 / 3) + 10, statsY + 16);
+
+    // 3. Transactions Table
+    autoTable(doc, {
+      startY: 65,
+      head: [[t.month, t.category, t.description, t.amount]],
+      body: sortedEntries.map(e => [
+        `${e.month} ${e.year}`,
+        e.category,
+        e.description || "---",
+        `${e.type === 'Income' ? '+' : '-'}€${Number(e.actual).toLocaleString()}`
+      ]),
+      theme: "plain",
+      headStyles: { fontStyle: "bold", textColor: primaryPurple, fontSize: 9, cellPadding: { bottom: 4, top: 2 } },
+      columnStyles: { 
+        0: { cellWidth: 35 }, 
+        1: { cellWidth: 40 }, 
+        2: { cellWidth: "auto" }, 
+        3: { halign: "right", fontStyle: "bold" } 
+      },
+      didDrawPage: (data) => {
+        doc.setDrawColor(...primaryPurple);
+        doc.setLineWidth(0.5);
+        const headerBottomY = data.settings.startY + 8; 
+        if (data.pageNumber === 1) doc.line(margin, headerBottomY, pageWidth - margin, headerBottomY);
+      },
+      didParseCell: (data) => {
+        if (data.column.index === 3 && data.section === 'body') {
+            const val = data.cell.raw;
+            if (val.includes('+')) data.cell.styles.textColor = [16, 185, 129];
+            if (val.includes('-')) data.cell.styles.textColor = [239, 68, 68];
+        }
+        data.cell.styles.borderBottom = 0.05;
+        data.cell.styles.lineColor = [240, 240, 240];
+      }
+    });
+
+    doc.save(`${fileName}.pdf`);
+  };
 
   const clearAllEntries = async () => {
     const result = await Swal.fire({
@@ -172,7 +269,7 @@ const PersonalFinance = ({ darkMode }) => {
   };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pf-container" ref={pdfRef}>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pf-container">
       
       {/* 1. DASHBOARD STATS */}
       <div className="row g-4 mb-4">
@@ -212,7 +309,7 @@ const PersonalFinance = ({ darkMode }) => {
         </div>
       )}
 
-      {/* 3. PREMIUM ACTION BAR (ADD ENTRY) */}
+      {/* 3. PREMIUM ACTION BAR */}
       <div className="pf-card no-print">
         <h6 className="text-muted small fw-bold text-uppercase mb-3 tracking-wider">Quick Transaction</h6>
         <div className="pf-action-bar">
@@ -255,10 +352,10 @@ const PersonalFinance = ({ darkMode }) => {
           <table className="pf-table">
             <thead>
               <tr>
-                <th onClick={() => toggleSort("month")}>Period</th>
-                <th onClick={() => toggleSort("category")}>Category</th>
-                <th className="d-none d-md-table-cell">Description</th>
-                <th onClick={() => toggleSort("actual")} className="text-end">Amount</th>
+                <th onClick={() => toggleSort("month")}>{t.month}</th>
+                <th onClick={() => toggleSort("category")}>{t.category}</th>
+                <th className="d-none d-md-table-cell">{t.description}</th>
+                <th onClick={() => toggleSort("actual")} className="text-end">{t.amount}</th>
                 <th className="text-end no-print">Actions</th>
               </tr>
             </thead>
@@ -266,18 +363,13 @@ const PersonalFinance = ({ darkMode }) => {
               <AnimatePresence>
                 {paginated.map((e, i) => (
                   <motion.tr key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} layout>
-                    <td data-label="Period" className="small text-muted fw-bold">{e.month} {e.year}</td>
-                    <td data-label="Category"><span className={`pf-badge ${e.type === 'Income' ? 'pf-income-bg' : 'pf-expense-bg'}`}>{e.category}</span></td>
-                    <td data-label="Description" className="text-muted small d-none d-md-table-cell">{e.description}</td>
-                    <td data-label="Amount" className={`fw-bold text-end ${e.type === 'Income' ? 'text-success' : 'text-danger'}`}>
+                    <td data-label={t.month} className="small text-muted fw-bold">{e.month} {e.year}</td>
+                    <td data-label={t.category}><span className={`pf-badge ${e.type === 'Income' ? 'pf-income-bg' : 'pf-expense-bg'}`}>{e.category}</span></td>
+                    <td data-label={t.description} className="text-muted small d-none d-md-table-cell">{e.description}</td>
+                    <td data-label={t.amount} className={`fw-bold text-end ${e.type === 'Income' ? 'text-success' : 'text-danger'}`}>
                       {e.type === 'Income' ? '+' : '-'}€{Number(e.actual).toLocaleString()}
                     </td>
                     <td data-label="Actions" className="text-end no-print">
-                      <button className="btn btn-link text-warning p-1 me-2" onClick={() => setEntries(prev => { 
-                          const idx = entries.indexOf(e);
-                          /* handleEdit logic here */ 
-                          return prev; 
-                      })}><Edit3 size={16}/></button>
                       <button className="btn btn-link text-danger p-1" onClick={() => setEntries(prev => prev.filter(item => item !== e))}><Trash2 size={16}/></button>
                     </td>
                   </motion.tr>
@@ -300,10 +392,7 @@ const PersonalFinance = ({ darkMode }) => {
             <input type="file" ref={imageInputRef} className="d-none" onChange={handleBillImageUpload} />
             <button className="btn btn-light border btn-sm" onClick={() => excelInputRef.current.click()}><FileSpreadsheet size={14}/> Import</button>
             <button className="btn btn-light border btn-sm" onClick={() => imageInputRef.current.click()}><Camera size={14}/> Scan</button>
-            <button className="btn btn-primary btn-sm px-3" onClick={async () => {
-              const { value: fileName } = await Swal.fire({ title: t.enterFileName, input: "text" });
-              if (fileName) exportToPDF({ element: pdfRef.current, darkMode, fileName });
-            }}><FileText size={14}/> PDF</button>
+            <button className="btn btn-primary btn-sm px-3" onClick={handleDownloadFinancePDF}><FileText size={14}/> PDF</button>
             <button className="btn btn-success text-white btn-sm px-3" onClick={async () => {
               const { value: fileName } = await Swal.fire({ title: t.enterFileName, input: "text" });
               if (fileName) exportToExcel({ entries, totals: { income: totalIncome, expense: totalExpense, balance }, title: t.title, fileName });
