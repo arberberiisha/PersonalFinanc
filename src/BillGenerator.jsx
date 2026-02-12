@@ -61,6 +61,7 @@ const BillGenerator = () => {
     if (!invoice.clientName.trim()) { Swal.fire("Error", "Please enter Client Name", "error"); return; }
     const doc = new jsPDF("p", "mm", "a4");
     const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight(); // Get total page height (297mm)
     const margin = 15;
     const isSq = language === "sq";
     const primaryPurple = [79, 70, 229];
@@ -91,26 +92,25 @@ const BillGenerator = () => {
       note: isSq ? "Shënim:" : "Note:"
     };
 
-    // 1. RESTORED LARGE HEADER TITLE (Matches image_4dfb3b.png)
+    // 1. Header Title
     doc.setFontSize(22);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(...primaryPurple);
     doc.text(labels.title, margin, 20);
 
-    // Metadata Right Aligned
+    // Metadata Right
     doc.setFontSize(10);
     doc.setTextColor(100);
     doc.setFont("helvetica", "normal");
     doc.text(`${labels.inv} ${invoice.invoiceNumber}`, pageWidth - margin, 20, { align: "right" });
 
-    // 2. LOGO & DECORATIVE LINES (Restored as per image_4f4958.png)
+    // 2. Logo & Decorative Lines
     if (invoice.logo) {
       try {
         doc.addImage(invoice.logo, "PNG", margin, 25, 25, 15);
       } catch (e) {}
     }
     
-    // Decorative lines next to logo/below title
     doc.setDrawColor(230);
     for (let i = 0; i < 6; i++) doc.line(45, 27 + (i * 2.2), 110, 27 + (i * 2.2));
 
@@ -130,6 +130,7 @@ const BillGenerator = () => {
     doc.text(invoice.senderAddress, pageWidth / 2 + 10, infoY + 11);
     doc.text(invoice.senderEmail, pageWidth / 2 + 10, infoY + 16);
 
+    // 4. Table
     autoTable(doc, {
       startY: 88,
       head: [[labels.colPuna, labels.colQty, labels.colRate, labels.colTotal]],
@@ -158,24 +159,35 @@ const BillGenerator = () => {
       }
     });
 
-    let finalY = doc.lastAutoTable.finalY + 10;
+    // 5. Total Section (Calculated relative to table end)
+    let totalY = doc.lastAutoTable.finalY + 10;
     doc.setDrawColor(...primaryPurple); doc.setLineWidth(0.5);
-    doc.line(pageWidth - 95, finalY - 2, pageWidth - margin, finalY - 2);
+    doc.line(pageWidth - 95, totalY - 2, pageWidth - margin, totalY - 2);
 
-    doc.setFillColor(249, 250, 251); doc.rect(pageWidth - 95, finalY, 80, 12, "F");
+    doc.setFillColor(249, 250, 251); doc.rect(pageWidth - 95, totalY, 80, 12, "F");
     doc.setFont("helvetica", "bold"); doc.setTextColor(...primaryPurple);
-    doc.text(labels.due, pageWidth - 90, finalY + 8);
-    doc.setTextColor(0); doc.text(`€ ${calculateTotal().toFixed(2)}`, pageWidth - margin - 5, finalY + 8, { align: "right" });
+    doc.text(labels.due, pageWidth - 90, totalY + 8);
+    doc.setTextColor(0); doc.text(`€ ${calculateTotal().toFixed(2)}`, pageWidth - margin - 5, totalY + 8, { align: "right" });
 
-    // Footer
+    // 6. STICKY FOOTER LOGIC (Payment & Notes at the absolute bottom)
+    const footerY = pageHeight - 35; // Position 35mm from the very bottom of the page
     doc.setFontSize(10);
+    doc.setDrawColor(230);
+    doc.setLineWidth(0.1);
+    doc.line(margin, footerY - 5, pageWidth - margin, footerY - 5); // Optional horizontal separator line
+
     if (invoice.paymentMethod) {
-      doc.setFont("helvetica", "bold"); doc.text(labels.payment, margin, finalY + 20);
-      doc.setFont("helvetica", "normal"); doc.text(invoice.paymentMethod, margin + 35, finalY + 20);
+      doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+      doc.text(labels.payment, margin, footerY);
+      doc.setFont("helvetica", "normal"); doc.setTextColor(80);
+      doc.text(invoice.paymentMethod, margin + 35, footerY);
     }
+    
     if (invoice.notes) {
-      doc.setFont("helvetica", "bold"); doc.text(labels.note, margin, finalY + 27);
-      doc.setFont("helvetica", "normal"); doc.text(invoice.notes, margin + (isSq ? 15 : 12), finalY + 27);
+      doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+      doc.text(labels.note, margin, footerY + 7);
+      doc.setFont("helvetica", "normal"); doc.setTextColor(80);
+      doc.text(invoice.notes, margin + (isSq ? 15 : 12), footerY + 7);
     }
 
     doc.save(`Invoice_${invoice.invoiceNumber}.pdf`);
