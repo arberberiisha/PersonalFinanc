@@ -36,15 +36,15 @@ body {
 }
 
 /* =========================================
-   2. INVOICE TABLE (PC OPTIMIZED)
+   2. SHARED TABLE STYLES (PC)
    ========================================= */
-.invoice-table {
+.invoice-table, .table-mobile-cards {
   width: 100%;
   border-collapse: collapse;
   margin-top: 20px;
 }
 
-.invoice-table th {
+.invoice-table th, .table-mobile-cards th {
   background-color: #f8fafc;
   padding: 12px 15px;
   font-size: 0.75rem;
@@ -54,12 +54,18 @@ body {
   border-bottom: 2px solid #e2e8f0;
 }
 
-.invoice-table td {
+.invoice-table td, .table-mobile-cards td {
   padding: 10px 15px;
   border-bottom: 1px solid var(--border-color);
   vertical-align: middle;
 }
 
+/* Helper Alignments */
+.text-start { text-align: left !important; }
+.text-center { text-align: center !important; }
+.text-end { text-align: right !important; }
+
+/* Interactive Inputs in Tables */
 .invoice-table input {
   width: 100%;
   border: 1px solid transparent;
@@ -70,16 +76,10 @@ body {
   transition: all 0.2s;
 }
 
-.invoice-table input:hover, 
-.invoice-table input:focus {
+.invoice-table input:hover, .invoice-table input:focus {
   background: rgba(79, 70, 229, 0.04);
   outline: none;
 }
-
-/* Alignment Helpers for Web View */
-.text-start { text-align: left !important; }
-.text-center { text-align: center !important; }
-.text-end { text-align: right !important; }
 
 /* Form Group Refinements */
 .input-group:focus-within {
@@ -87,23 +87,24 @@ body {
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1) !important;
 }
 
-/* Hide Spinners for cleaner UI */
+/* Hide Spinners */
 input[type=number]::-webkit-inner-spin-button, 
 input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 input[type=number] { -moz-appearance: textfield; }
 
 /* =========================================
-   3. MOBILE STYLES (Cards for Phone UX)
+   3. MOBILE RESPONSIVENESS (Card View)
    ========================================= */
 @media (max-width: 768px) {
-  .invoice-table thead { display: none; }
+  .invoice-table thead, .table-mobile-cards thead { display: none; }
   
-  .invoice-table tbody, .invoice-table tr, .invoice-table td { 
+  .invoice-table tbody, .invoice-table tr, .invoice-table td,
+  .table-mobile-cards tbody, .table-mobile-cards tr, .table-mobile-cards td { 
     display: block; 
     width: 100%; 
   }
 
-  .invoice-table tr { 
+  .invoice-table tr, .table-mobile-cards tr { 
     background: var(--bg-card);
     margin-bottom: 1rem; 
     border: 1px solid var(--border-color); 
@@ -112,7 +113,7 @@ input[type=number] { -moz-appearance: textfield; }
     box-shadow: var(--shadow-sm);
   }
 
-  .invoice-table td { 
+  .invoice-table td, .table-mobile-cards td { 
     border: none !important; 
     display: flex; 
     justify-content: space-between; 
@@ -120,7 +121,7 @@ input[type=number] { -moz-appearance: textfield; }
     padding: 0.6rem 0 !important; 
   }
 
-  .invoice-table td::before { 
+  .invoice-table td::before, .table-mobile-cards td::before { 
     content: attr(data-label); 
     font-weight: 700; 
     color: var(--text-muted); 
@@ -142,7 +143,7 @@ input[type=number] { -moz-appearance: textfield; }
 @media print { .no-print { display: none !important; } }
 
 /* =========================================
-   4. FINANCE SPECIFIC REFINEMENTS
+   4. FINANCE & UTILITY REFINEMENTS
    ========================================= */
 .badge {
   padding: 6px 12px;
@@ -154,110 +155,20 @@ input[type=number] { -moz-appearance: textfield; }
 .badge-income { background: rgba(16, 185, 129, 0.1); color: #10b981; }
 .badge-expense { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
 
-.table-mobile-cards {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0 8px;
-}
-
-.table-mobile-cards th {
-  padding: 12px;
-  color: var(--text-muted);
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  border-bottom: 2px solid var(--border-color);
-}
-
-.table-mobile-cards td {
-  padding: 16px 12px;
-  background: var(--bg-card);
-  vertical-align: middle;
-}
-
-@media (max-width: 768px) {
-  .table-mobile-cards thead { display: none; }
-  .table-mobile-cards tr { 
-    display: block; 
-    border: 1px solid var(--border-color); 
-    border-radius: 12px; 
-    margin-bottom: 1rem; 
-    padding: 1rem;
-    background: var(--bg-card);
-  }
-  .table-mobile-cards td { 
-    display: flex; 
-    justify-content: space-between; 
-    align-items: center; 
-    border: none !important;
-    padding: 8px 0 !important;
-  }
-  .table-mobile-cards td::before {
-    content: attr(data-label);
-    font-weight: 700;
-    color: var(--text-muted);
-    font-size: 0.75rem;
-  }
-}
-
 /* =========================================
    5. DARK MODE OVERRIDES
    ========================================= */
 body.dark-mode {
-  --bg-body: #0f172a;      /* Deep blue/black background */
-  --bg-card: #1e293b;      /* Darker slate for cards */
-  --text-main: #f1f5f9;    /* Near white text */
-  --text-muted: #94a3b8;   /* Muted gray text */
-  --border-color: #334155; /* Subtle dark border */
+  --bg-body: #0f172a;
+  --bg-card: #1e293b;
+  --text-main: #f1f5f9;
+  --text-muted: #94a3b8;
+  --border-color: #334155;
 }
 
-body.dark-mode .bg-white {
-  background-color: var(--bg-card) !important;
-  color: var(--text-main) !important;
-}
-
-body.dark-mode .bg-light, 
-body.dark-mode .input-group-text {
-  background-color: #0f172a !important;
-  color: var(--text-main) !important;
-  border-color: var(--border-color) !important;
-}
-
-body.dark-mode .form-control, 
-body.dark-mode .form-select {
-  background-color: #0f172a;
-  color: var(--text-main);
-  border-color: var(--border-color);
-}
-
-body.dark-mode .form-control:focus, 
-body.dark-mode .form-select:focus {
-  background-color: #0f172a;
-  color: #ffffff;
-}
-
-body.dark-mode .invoice-table th,
-body.dark-mode .table-mobile-cards th {
-  background-color: #1e293b;
-  color: var(--text-muted);
-  border-bottom-color: var(--border-color);
-}
-
-body.dark-mode .dashboard-card,
-body.dark-mode .table-mobile-cards tr {
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
-}
-
-body.dark-mode .btn-white {
-  background-color: var(--bg-card);
-  color: var(--text-main);
-  border-color: var(--border-color);
-}
-
-/* Ensure Table Inputs in Dark Mode remain visible */
-body.dark-mode .invoice-table input {
-  color: var(--text-main);
-}
-body.dark-mode .invoice-table input:hover,
-body.dark-mode .invoice-table input:focus {
-  background: rgba(255, 255, 255, 0.05);
-}
+body.dark-mode .bg-white { background-color: var(--bg-card) !important; color: var(--text-main) !important; }
+body.dark-mode .bg-light, body.dark-mode .input-group-text { background-color: #0f172a !important; color: var(--text-main) !important; border-color: var(--border-color) !important; }
+body.dark-mode .form-control, body.dark-mode .form-select { background-color: #0f172a; color: var(--text-main); border-color: var(--border-color); }
+body.dark-mode .invoice-table th, body.dark-mode .table-mobile-cards th { background-color: #1e293b; color: var(--text-muted); }
+body.dark-mode .btn-white { background-color: var(--bg-card); color: var(--text-main); border-color: var(--border-color); }
+body.dark-mode .invoice-table input { color: var(--text-main); }
