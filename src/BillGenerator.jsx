@@ -26,15 +26,12 @@ const BillGenerator = () => {
     logo: null,
     invoiceNumber: "INV-001",
     date: new Date().toISOString().split("T")[0],
-    // Sender (From)
     senderName: "RBTech, KS",
     senderAddress: "Pristina, Kosovo",
     senderEmail: "info@rbtech.com",
-    // Client (To)
     clientName: "",
     clientEmail: "",
     clientAddress: "",
-    // Footer
     paymentMethod: "",
     notes: "",
     items: [{ description: "", quantity: 1, unit: "", price: 0 }],
@@ -66,9 +63,8 @@ const BillGenerator = () => {
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 15;
     const isSq = language === "sq";
-    const primaryPurple = [79, 70, 229]; // Indigo color
+    const primaryPurple = [79, 70, 229];
 
-    // --- DATE FORMATTING ---
     const dateObj = new Date(invoice.date);
     const day = dateObj.getDate();
     const monthIndex = dateObj.getMonth();
@@ -93,20 +89,22 @@ const BillGenerator = () => {
       note: isSq ? "Shënim:" : "Note:"
     };
 
-    // 1. Header Metadata
     doc.setFontSize(10); doc.setTextColor(100);
     doc.text(invoice.senderName.toUpperCase(), margin, 20);
     doc.text(`${labels.inv} ${invoice.invoiceNumber}`, pageWidth - margin, 20, { align: "right" });
 
-    // 2. Logo & Design
-    if (invoice.logo) try { doc.addImage(invoice.logo, "PNG", margin, 25, 20, 15); } catch (e) {}
+    if (invoice.logo) {
+      try {
+        doc.addImage(invoice.logo, "PNG", margin, 25, 20, 15);
+      } catch (e) {}
+    }
+    
     doc.setDrawColor(230);
     for (let i = 0; i < 6; i++) doc.line(40, 27 + (i * 2.2), 110, 27 + (i * 2.2));
 
     doc.setFont("helvetica", "bold"); doc.setTextColor(0);
     doc.text(`${labels.date} ${formattedDate}`, margin, 50);
 
-    // 3. Address Columns
     const infoY = 60;
     doc.setTextColor(...primaryPurple); doc.text(labels.billedTo, margin, infoY);
     doc.text(labels.from, pageWidth / 2 + 10, infoY);
@@ -119,7 +117,6 @@ const BillGenerator = () => {
     doc.text(invoice.senderAddress, pageWidth / 2 + 10, infoY + 11);
     doc.text(invoice.senderEmail, pageWidth / 2 + 10, infoY + 16);
 
-    // 4. TABLE WITH STYLIZED HEADER LINE
     autoTable(doc, {
       startY: 88,
       head: [[labels.colPuna, labels.colQty, labels.colRate, labels.colTotal]],
@@ -130,23 +127,11 @@ const BillGenerator = () => {
         `€${(Number(i.quantity) * Number(i.price)).toFixed(2)}`
       ]),
       theme: "plain",
-      headStyles: { 
-        fontStyle: "bold", 
-        textColor: primaryPurple, // Headers now match your indigo theme
-        fontSize: 9,
-        cellPadding: { bottom: 4, top: 2 } 
-      },
-      columnStyles: { 
-        0: { cellWidth: "auto" }, 
-        1: { halign: "center", cellWidth: 25 }, 
-        2: { halign: "right", cellWidth: 35 }, 
-        3: { halign: "right", cellWidth: 35, fontStyle: "bold" } 
-      },
+      headStyles: { fontStyle: "bold", textColor: primaryPurple, fontSize: 9, cellPadding: { bottom: 4, top: 2 } },
+      columnStyles: { 0: { cellWidth: "auto" }, 1: { halign: "center", cellWidth: 25 }, 2: { halign: "right", cellWidth: 35 }, 3: { halign: "right", cellWidth: 35, fontStyle: "bold" } },
       didDrawPage: (data) => {
-        // --- ADDING THE LINE UNDER HEADERS ---
         doc.setDrawColor(...primaryPurple);
         doc.setLineWidth(0.5);
-        // data.table.head[0].y + height of the cell
         const headerBottomY = data.settings.startY + 8; 
         doc.line(margin, headerBottomY, pageWidth - margin, headerBottomY);
       },
@@ -155,13 +140,11 @@ const BillGenerator = () => {
           if (data.column.index === 1) data.cell.styles.halign = 'center';
           if (data.column.index >= 2) data.cell.styles.halign = 'right';
         }
-        // Subtle row separators
         data.cell.styles.borderBottom = 0.05;
         data.cell.styles.lineColor = [240, 240, 240];
       }
     });
 
-    // 5. Total Section
     let finalY = doc.lastAutoTable.finalY + 10;
     doc.setDrawColor(...primaryPurple); doc.setLineWidth(0.5);
     doc.line(pageWidth - 95, finalY - 2, pageWidth - margin, finalY - 2);
@@ -171,26 +154,47 @@ const BillGenerator = () => {
     doc.text(labels.due, pageWidth - 90, finalY + 8);
     doc.setTextColor(0); doc.text(`€ ${calculateTotal().toFixed(2)}`, pageWidth - margin - 5, finalY + 8, { align: "right" });
 
-    // 6. Footer
-    doc.setFontSize(10);
-    if (invoice.paymentMethod) {
-      doc.setFont("helvetica", "bold"); doc.text(labels.payment, margin, finalY + 20);
-      doc.setFont("helvetica", "normal"); doc.text(invoice.paymentMethod, margin + 35, finalY + 20);
-    }
-    if (invoice.notes) {
-      doc.setFont("helvetica", "bold"); doc.text(labels.note, margin, finalY + 27);
-      doc.setFont("helvetica", "normal"); doc.text(invoice.notes, margin + (isSq ? 15 : 12), finalY + 27);
-    }
-
     doc.save(`Invoice_${invoice.invoiceNumber}.pdf`);
   };
 
   return (
     <div className="dashboard-card p-4 p-md-5">
-      <div className="d-flex justify-content-between border-bottom pb-4 mb-5">
-        <div><h2 className="fw-bold text-primary mb-0">{t.invoiceTitle}</h2></div>
-        <div className="text-end">
-          <label className="text-muted small fw-bold">TOTAL DUE</label>
+      {/* HEADER SECTION WITH LOGO RESTORED */}
+      <div className="d-flex flex-column flex-md-row justify-content-between align-items-start mb-5 border-bottom pb-4 gap-4">
+        <div className="w-100">
+          <div className="mb-3">
+            <input type="file" accept="image/*" ref={logoInputRef} style={{ display: "none" }} onChange={handleLogoUpload} />
+            {invoice.logo ? (
+              <div 
+                className="position-relative d-inline-block" 
+                onMouseEnter={() => setLogoHover(true)} 
+                onMouseLeave={() => setLogoHover(false)}
+              >
+                <img src={invoice.logo} alt="Logo" style={{ maxHeight: "80px", objectFit: "contain" }} />
+                {logoHover && (
+                  <button 
+                    className="btn btn-sm btn-danger position-absolute top-0 start-100 translate-middle rounded-circle p-0 no-print" 
+                    style={{ width: "20px", height: "20px" }} 
+                    onClick={() => setInvoice({ ...invoice, logo: null })}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div 
+                className="no-print d-flex align-items-center gap-2 text-muted border rounded px-3 py-3 bg-light small" 
+                onClick={() => logoInputRef.current.click()} 
+                style={{ cursor: "pointer", borderStyle: "dashed", width: "fit-content" }}
+              >
+                <ImageIcon size={20} /> {t.uploadLogo || "Upload Logo"}
+              </div>
+            )}
+          </div>
+          <h2 className="fw-bold text-primary mb-0"><Receipt className="me-2" />{t.invoiceTitle}</h2>
+        </div>
+        <div className="text-md-end w-100">
+          <label className="text-muted small fw-bold text-uppercase d-block mb-1">TOTAL DUE</label>
           <h2 className="fw-bold display-5 text-dark mb-0">€{calculateTotal().toFixed(2)}</h2>
         </div>
       </div>
