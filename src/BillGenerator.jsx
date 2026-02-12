@@ -1,6 +1,7 @@
 import React, { useRef, useState } from "react";
 import { useTranslations } from "./LanguageContext";
 import Swal from "sweetalert2";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus,
   Download,
@@ -25,15 +26,15 @@ const BillGenerator = () => {
     logo: null,
     invoiceNumber: "INV-001",
     date: new Date().toISOString().split("T")[0],
-    // "From" Section (Sender)
+    // Sender (From)
     senderName: "RBTech, KS",
     senderAddress: "Pristina, Kosovo",
     senderEmail: "info@rbtech.com",
-    // "Billed To" Section (Client)
+    // Client (To)
     clientName: "",
     clientEmail: "",
     clientAddress: "",
-    // Footer Details
+    // Footer
     paymentMethod: "",
     notes: "",
     items: [{ description: "", quantity: 1, unit: "", price: 0 }],
@@ -66,102 +67,110 @@ const BillGenerator = () => {
     const margin = 15;
     const isSq = language === "sq";
 
+    // --- DATE FORMATTING USING YOUR t.months TRANSLATIONS ---
+    const dateObj = new Date(invoice.date);
+    const day = dateObj.getDate();
+    const monthIndex = dateObj.getMonth();
+    const year = dateObj.getFullYear();
+    
+    const monthTranslated = t.months[monthIndex];
+
+    // Format: "12 Shkurt, 2026" for AL or "February 12, 2026" for EN
+    const formattedDate = isSq 
+      ? `${day} ${monthTranslated}, ${year}` 
+      : `${monthTranslated} ${day}, ${year}`;
+
     const labels = {
-      title: isSq ? "FATURË" : "INVOICE",
+      inv: isSq ? "NO:" : "NO:",
+      date: isSq ? "Data:" : "Date:",
       billedTo: isSq ? "Faturuar për:" : "Billed to:",
       from: isSq ? "Nga:" : "From:",
-      date: isSq ? "Data" : "Date",
-      inv: isSq ? "Fatura #" : "Invoice #",
-      colPuna: isSq ? "Përshkrimi" : "Description",
+      colPuna: isSq ? "Përshkrimi i Punës" : "Description of Services",
       colQty: isSq ? "Sasia" : "Qty",
       colRate: isSq ? "Çmimi" : "Rate",
       colTotal: isSq ? "Shuma" : "Total",
-      due: isSq ? "Gjithsej" : "Total Due"
+      due: isSq ? "Gjithsej për pagesë" : "Total Amount Due",
+      payment: isSq ? "Mënyra e pagesës:" : "Payment Method:",
+      note: isSq ? "Shënim:" : "Note:"
     };
 
-    // 1. Header Meta
+    // 1. Header Metadata
     doc.setFontSize(10); doc.setTextColor(100);
     doc.text(invoice.senderName.toUpperCase(), margin, 20);
     doc.text(`${labels.inv} ${invoice.invoiceNumber}`, pageWidth - margin, 20, { align: "right" });
 
-    // 2. Logo & Decorative Lines
-    if (invoice.logo) try { doc.addImage(invoice.logo, "PNG", margin, 25, 25, 15); } catch (e) {}
+    // 2. Logo & Design
+    if (invoice.logo) try { doc.addImage(invoice.logo, "PNG", margin, 25, 20, 15); } catch (e) {}
     doc.setDrawColor(230);
-    for (let i = 0; i < 6; i++) doc.line(45, 27 + (i * 2), 110, 27 + (i * 2));
+    for (let i = 0; i < 6; i++) doc.line(40, 27 + (i * 2.2), 110, 27 + (i * 2.2));
 
-    // 3. Date Info
     doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-    doc.text(`${labels.date}: ${invoice.date}`, margin, 50);
+    doc.text(`${labels.date} ${formattedDate}`, margin, 50);
 
-    // 4. Two-Column Contact Section
+    // 3. Address Columns
     const infoY = 60;
-    const primaryPurple = [79, 70, 229];
-    doc.setTextColor(...primaryPurple); 
-    doc.text(labels.billedTo, margin, infoY);
+    const accentColor = [79, 70, 229];
+    doc.setTextColor(...accentColor); doc.text(labels.billedTo, margin, infoY);
     doc.text(labels.from, pageWidth / 2 + 10, infoY);
     
-    doc.setFont("helvetica", "normal"); doc.setTextColor(100);
+    doc.setFont("helvetica", "normal"); doc.setTextColor(80);
+    // TO (Client)
     doc.text(invoice.clientName || "---", margin, infoY + 6);
     doc.text(invoice.clientAddress || "---", margin, infoY + 11);
     doc.text(invoice.clientEmail || "---", margin, infoY + 16);
-
+    // FROM (Sender)
     doc.text(invoice.senderName, pageWidth / 2 + 10, infoY + 6);
     doc.text(invoice.senderAddress, pageWidth / 2 + 10, infoY + 11);
     doc.text(invoice.senderEmail, pageWidth / 2 + 10, infoY + 16);
 
-    // 5. Table with Alignment Fixes
+    // 4. Table
     autoTable(doc, {
       startY: 88,
-      head: [[labels.colPuna, labels.colQty, labels.colRate, labels.colTotal]],
+      head: [[labels.colPuna, labels.colQty, labels.colRate, labels.colTotal, ]],
       body: invoice.items.map(i => [
-        i.description, 
-        `${i.quantity} ${i.unit.replace(/m2/gi, "m²")}`, 
-        `€${i.price.toFixed(2)}`, 
-        `€${(i.quantity * i.price).toFixed(2)}`
+        i.description || "---", 
+        `${i.quantity} ${i.unit ? i.unit.replace(/m2/gi, "m²") : ""}`.trim(), 
+        `€${Number(i.price).toFixed(2)}`, 
+        `€${(Number(i.quantity) * Number(i.price)).toFixed(2)}`
       ]),
       theme: "plain",
-      headStyles: { 
-        fontStyle: "bold", 
-        textColor: [100, 100, 100], 
-        fontSize: 9,
-        halign: 'left' // Default
-      },
-      bodyStyles: { textColor: [0, 0, 0], fontSize: 10, cellPadding: 3 },
+      headStyles: { fontStyle: "bold", textColor: [100, 100, 100], fontSize: 9 },
       columnStyles: { 
-        0: { cellWidth: "auto", halign: "left" }, 
-        1: { cellWidth: 25, halign: "center" }, 
-        2: { cellWidth: 35, halign: "right" }, 
-        3: { cellWidth: 35, halign: "right", fontStyle: "bold" } 
+        0: { cellWidth: "auto" }, 
+        1: { halign: "center", cellWidth: 25 }, 
+        2: { halign: "right", cellWidth: 35 }, 
+        3: { halign: "right", cellWidth: 35, fontStyle: "bold" } 
       },
       didParseCell: (data) => {
-        // Sync Header alignment with Body alignment
         if (data.section === 'head') {
           if (data.column.index === 1) data.cell.styles.halign = 'center';
           if (data.column.index >= 2) data.cell.styles.halign = 'right';
         }
         data.cell.styles.borderBottom = 0.1;
-        data.cell.styles.lineColor = [230, 230, 230];
+        data.cell.styles.lineColor = [240, 240, 240];
       }
     });
 
-    // 6. Final Total Section
-    const finalY = doc.lastAutoTable.finalY + 10;
-    
-    // --- THE LINE BEFORE TOTAL ---
-    doc.setDrawColor(...primaryPurple);
-    doc.setLineWidth(0.5);
+    // 5. Total Line & Box
+    let finalY = doc.lastAutoTable.finalY + 10;
+    doc.setDrawColor(...accentColor); doc.setLineWidth(0.5);
     doc.line(pageWidth - 95, finalY - 2, pageWidth - margin, finalY - 2);
 
-    // Total Background Box
-    doc.setFillColor(249, 250, 251); 
-    doc.rect(pageWidth - 95, finalY, 80, 12, "F");
-    
-    doc.setFont("helvetica", "bold"); 
-    doc.setTextColor(...primaryPurple);
+    doc.setFillColor(249, 250, 251); doc.rect(pageWidth - 95, finalY, 80, 12, "F");
+    doc.setFont("helvetica", "bold"); doc.setTextColor(...accentColor);
     doc.text(labels.due, pageWidth - 90, finalY + 8);
-    
-    doc.setTextColor(0); 
-    doc.text(`€ ${calculateTotal().toFixed(2)}`, pageWidth - margin - 5, finalY + 8, { align: "right" });
+    doc.setTextColor(0); doc.text(`€ ${calculateTotal().toFixed(2)}`, pageWidth - margin - 5, finalY + 8, { align: "right" });
+
+    // 6. Footer (Payment & Notes)
+    doc.setFontSize(10);
+    if (invoice.paymentMethod) {
+      doc.setFont("helvetica", "bold"); doc.text(labels.payment, margin, finalY + 20);
+      doc.setFont("helvetica", "normal"); doc.text(invoice.paymentMethod, margin + 35, finalY + 20);
+    }
+    if (invoice.notes) {
+      doc.setFont("helvetica", "bold"); doc.text(labels.note, margin, finalY + 27);
+      doc.setFont("helvetica", "normal"); doc.text(invoice.notes, margin + (isSq ? 15 : 12), finalY + 27);
+    }
 
     doc.save(`Invoice_${invoice.invoiceNumber}.pdf`);
   };
@@ -169,65 +178,101 @@ const BillGenerator = () => {
   return (
     <div className="dashboard-card p-4 p-md-5">
       <div className="d-flex justify-content-between border-bottom pb-4 mb-5">
-        <div>
-          <h2 className="fw-bold text-primary mb-0">{t.invoiceTitle}</h2>
-        </div>
+        <div><h2 className="fw-bold text-primary mb-0">{t.invoiceTitle}</h2></div>
         <div className="text-end">
-          <label className="text-muted small fw-bold">TOTAL AMOUNT</label>
-          <h2 className="fw-bold display-6">€{calculateTotal().toFixed(2)}</h2>
+          <label className="text-muted small fw-bold">TOTAL DUE</label>
+          <h2 className="fw-bold display-5 text-dark mb-0">€{calculateTotal().toFixed(2)}</h2>
         </div>
       </div>
 
       <div className="row g-4 mb-5">
         <div className="col-md-4">
-          <label className="small fw-bold text-muted">INVOICE META</label>
-          <div className="input-group mb-2 border rounded-3"><span className="input-group-text bg-white border-0"><Hash size={14}/></span><input type="text" className="form-control border-0" value={invoice.invoiceNumber} onChange={e => setInvoice({...invoice, invoiceNumber: e.target.value})} /></div>
-          <div className="input-group border rounded-3"><span className="input-group-text bg-white border-0"><Calendar size={14}/></span><input type="date" className="form-control border-0" value={invoice.date} onChange={e => setInvoice({...invoice, date: e.target.value})} /></div>
+          <label className="small fw-bold text-muted uppercase">Metadata</label>
+          <div className="input-group mb-2 border rounded-3 overflow-hidden shadow-sm">
+            <span className="input-group-text bg-white border-0"><Hash size={14} /></span>
+            <input type="text" className="form-control border-0" value={invoice.invoiceNumber} onChange={e => setInvoice({...invoice, invoiceNumber: e.target.value})} />
+          </div>
+          <div className="input-group border rounded-3 overflow-hidden shadow-sm">
+            <span className="input-group-text bg-white border-0"><Calendar size={14} /></span>
+            <input type="date" className="form-control border-0" value={invoice.date} onChange={e => setInvoice({...invoice, date: e.target.value})} />
+          </div>
         </div>
+        
         <div className="col-md-4">
-          <label className="small fw-bold text-muted">FROM (SENDER)</label>
-          <input type="text" className="form-control mb-1 bg-light border-0" placeholder="Your Name" value={invoice.senderName} onChange={e => setInvoice({...invoice, senderName: e.target.value})} />
-          <input type="text" className="form-control mb-1 bg-light border-0" placeholder="Address" value={invoice.senderAddress} onChange={e => setInvoice({...invoice, senderAddress: e.target.value})} />
-          <input type="email" className="form-control bg-light border-0" placeholder="Email" value={invoice.senderEmail} onChange={e => setInvoice({...invoice, senderEmail: e.target.value})} />
+          <label className="small fw-bold text-muted uppercase">From</label>
+          <input type="text" className="form-control mb-1 border-0 bg-light shadow-sm" placeholder="Your Name" value={invoice.senderName} onChange={e => setInvoice({...invoice, senderName: e.target.value})} />
+          <input type="text" className="form-control mb-1 border-0 bg-light shadow-sm" placeholder="Address" value={invoice.senderAddress} onChange={e => setInvoice({...invoice, senderAddress: e.target.value})} />
+          <input type="email" className="form-control border-0 bg-light shadow-sm" placeholder="Your Email" value={invoice.senderEmail} onChange={e => setInvoice({...invoice, senderEmail: e.target.value})} />
         </div>
+        
         <div className="col-md-4">
-          <label className="small fw-bold text-muted">TO (CLIENT)</label>
-          <input type="text" className="form-control mb-1 bg-light border-0" placeholder="Client Name" value={invoice.clientName} onChange={e => setInvoice({...invoice, clientName: e.target.value})} />
-          <input type="text" className="form-control mb-1 bg-light border-0" placeholder="Address" value={invoice.clientAddress} onChange={e => setInvoice({...invoice, clientAddress: e.target.value})} />
-          <input type="email" className="form-control bg-light border-0" placeholder="Client Email" value={invoice.clientEmail} onChange={e => setInvoice({...invoice, clientEmail: e.target.value})} />
+          <label className="small fw-bold text-muted uppercase">To</label>
+          <input type="text" className="form-control mb-1 border-0 bg-light shadow-sm" placeholder={t.clientName} value={invoice.clientName} onChange={e => setInvoice({...invoice, clientName: e.target.value})} />
+          <input type="text" className="form-control mb-1 border-0 bg-light shadow-sm" placeholder="Address" value={invoice.clientAddress} onChange={e => setInvoice({...invoice, clientAddress: e.target.value})} />
+          <input type="email" className="form-control border-0 bg-light shadow-sm" placeholder={t.clientEmail} value={invoice.clientEmail} onChange={e => setInvoice({...invoice, clientEmail: e.target.value})} />
         </div>
       </div>
 
-      <div className="table-responsive">
-        <table className="invoice-table">
+      <div className="pf-table-wrapper">
+        <table className="invoice-table w-100">
           <thead>
             <tr>
               <th className="text-start">{t.itemDesc}</th>
-              <th className="text-center">{t.itemQty}</th>
-              <th className="text-center">Unit (m²)</th>
-              <th className="text-end">{t.itemPrice}</th>
-              <th className="text-end">{t.total}</th>
-              <th className="no-print"></th>
+              <th className="text-center" style={{ width: '80px' }}>{t.itemQty}</th>
+              <th className="text-center" style={{ width: '100px' }}>Unit</th>
+              <th className="text-end" style={{ width: '120px' }}>{t.itemPrice}</th>
+              <th className="text-end" style={{ width: '120px' }}>{t.total}</th>
+              <th className="no-print text-center" style={{ width: '50px' }}></th>
             </tr>
           </thead>
           <tbody>
-            {invoice.items.map((item, idx) => (
-              <tr key={idx}>
-                <td data-label={t.itemDesc}><input type="text" className="form-control border-0" value={item.description} onChange={e => handleItemChange(idx, "description", e.target.value)} /></td>
-                <td data-label={t.itemQty}><input type="number" className="form-control border-0 text-center" value={item.quantity === 0 ? "" : item.quantity} onFocus={() => item.quantity === 0 && handleItemChange(idx, "quantity", "")} onChange={e => handleItemChange(idx, "quantity", e.target.value)} /></td>
-                <td data-label="Unit"><input type="text" className="form-control border-0 text-center" placeholder="m²" value={item.unit} onChange={e => handleItemChange(idx, "unit", e.target.value)} /></td>
-                <td data-label={t.itemPrice} className="text-end">€<input type="number" className="form-control border-0 d-inline-block text-end" style={{width:'80px'}} value={item.price === 0 ? "" : item.price} onFocus={() => item.price === 0 && handleItemChange(idx, "price", "")} onChange={e => handleItemChange(idx, "price", e.target.value)} /></td>
-                <td data-label={t.total} className="fw-bold text-end pe-3">€{(item.quantity * item.price).toFixed(2)}</td>
-                <td className="no-print"><button className="btn btn-link text-danger p-0" onClick={() => setInvoice({...invoice, items: invoice.items.filter((_, i) => i !== idx)})}><Trash2 size={16}/></button></td>
-              </tr>
-            ))}
+            <AnimatePresence>
+              {invoice.items.map((item, idx) => (
+                <motion.tr key={idx} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                  <td data-label={t.itemDesc} className="text-start">
+                    <input type="text" className="form-control border-0 bg-transparent p-0" placeholder="Service..." value={item.description} onChange={e => handleItemChange(idx, "description", e.target.value)} />
+                  </td>
+                  <td data-label={t.itemQty} className="text-center">
+                    <input type="number" className="form-control border-0 bg-transparent p-0 text-center" value={item.quantity === 0 ? "" : item.quantity} onChange={e => handleItemChange(idx, "quantity", e.target.value)} />
+                  </td>
+                  <td data-label="Unit" className="text-center">
+                    <input type="text" className="form-control border-0 bg-transparent p-0 text-center" placeholder="e.g. m²" value={item.unit} onChange={e => handleItemChange(idx, "unit", e.target.value)} />
+                  </td>
+                  <td data-label={t.itemPrice} className="text-end">
+                    <div className="d-flex justify-content-end align-items-center">
+                      <span className="small text-muted me-1">€</span>
+                      <input type="number" className="form-control border-0 bg-transparent p-0 text-end" style={{width:'70px'}} value={item.price === 0 ? "" : item.price} onChange={e => handleItemChange(idx, "price", e.target.value)} />
+                    </div>
+                  </td>
+                  <td data-label={t.total} className="fw-bold text-end pe-2">€{(Number(item.quantity) * Number(item.price)).toFixed(2)}</td>
+                  <td className="no-print text-center">
+                    <button className="btn btn-link text-danger p-0" onClick={() => setInvoice({...invoice, items: invoice.items.filter((_, i) => i !== idx)})}><Trash2 size={16}/></button>
+                  </td>
+                </motion.tr>
+              ))}
+            </AnimatePresence>
           </tbody>
         </table>
       </div>
 
+      <div className="row g-4 mt-4 border-top pt-4">
+        <div className="col-md-6">
+          <div className="input-group mb-2 border rounded-3 shadow-sm overflow-hidden">
+            <span className="input-group-text bg-white border-0"><CreditCard size={16} className="text-muted" /></span>
+            <input type="text" className="form-control border-0" placeholder="Payment Method" value={invoice.paymentMethod} onChange={e => setInvoice({ ...invoice, paymentMethod: e.target.value })} />
+          </div>
+        </div>
+        <div className="col-md-6">
+          <div className="input-group border rounded-3 shadow-sm overflow-hidden">
+            <span className="input-group-text bg-white border-0"><Notebook size={16} className="text-muted" /></span>
+            <input type="text" className="form-control border-0" placeholder="Notes" value={invoice.notes} onChange={e => setInvoice({ ...invoice, notes: e.target.value })} />
+          </div>
+        </div>
+      </div>
+
       <div className="d-flex justify-content-between mt-5 border-top pt-4 no-print">
-        <button className="btn btn-white border shadow-sm" onClick={() => setInvoice({...invoice, items: [...invoice.items, {description:"", quantity:1, unit:"", price:0}]})}><Plus size={18}/> Add Item</button>
-        <button className="btn btn-primary shadow px-5" onClick={handleDownloadPDF}><Download size={18}/> Download PDF</button>
+        <button className="btn btn-white border shadow-sm px-4" onClick={() => setInvoice({...invoice, items: [...invoice.items, {description:"", quantity:1, unit:"", price:0}]})}><Plus size={18}/> {t.addItem}</button>
+        <button className="btn btn-primary shadow px-5" onClick={handleDownloadPDF}><Download size={18}/> {t.downloadInvoice}</button>
       </div>
     </div>
   );
