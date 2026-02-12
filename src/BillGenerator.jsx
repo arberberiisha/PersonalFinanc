@@ -66,16 +66,15 @@ const BillGenerator = () => {
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 15;
     const isSq = language === "sq";
+    const primaryPurple = [79, 70, 229]; // Indigo color
 
-    // --- DATE FORMATTING USING YOUR t.months TRANSLATIONS ---
+    // --- DATE FORMATTING ---
     const dateObj = new Date(invoice.date);
     const day = dateObj.getDate();
     const monthIndex = dateObj.getMonth();
     const year = dateObj.getFullYear();
-    
     const monthTranslated = t.months[monthIndex];
 
-    // Format: "12 Shkurt, 2026" for AL or "February 12, 2026" for EN
     const formattedDate = isSq 
       ? `${day} ${monthTranslated}, ${year}` 
       : `${monthTranslated} ${day}, ${year}`;
@@ -109,24 +108,21 @@ const BillGenerator = () => {
 
     // 3. Address Columns
     const infoY = 60;
-    const accentColor = [79, 70, 229];
-    doc.setTextColor(...accentColor); doc.text(labels.billedTo, margin, infoY);
+    doc.setTextColor(...primaryPurple); doc.text(labels.billedTo, margin, infoY);
     doc.text(labels.from, pageWidth / 2 + 10, infoY);
     
     doc.setFont("helvetica", "normal"); doc.setTextColor(80);
-    // TO (Client)
     doc.text(invoice.clientName || "---", margin, infoY + 6);
     doc.text(invoice.clientAddress || "---", margin, infoY + 11);
     doc.text(invoice.clientEmail || "---", margin, infoY + 16);
-    // FROM (Sender)
     doc.text(invoice.senderName, pageWidth / 2 + 10, infoY + 6);
     doc.text(invoice.senderAddress, pageWidth / 2 + 10, infoY + 11);
     doc.text(invoice.senderEmail, pageWidth / 2 + 10, infoY + 16);
 
-    // 4. Table
+    // 4. TABLE WITH STYLIZED HEADER LINE
     autoTable(doc, {
       startY: 88,
-      head: [[labels.colPuna, labels.colQty, labels.colRate, labels.colTotal, ]],
+      head: [[labels.colPuna, labels.colQty, labels.colRate, labels.colTotal]],
       body: invoice.items.map(i => [
         i.description || "---", 
         `${i.quantity} ${i.unit ? i.unit.replace(/m2/gi, "m²") : ""}`.trim(), 
@@ -134,34 +130,48 @@ const BillGenerator = () => {
         `€${(Number(i.quantity) * Number(i.price)).toFixed(2)}`
       ]),
       theme: "plain",
-      headStyles: { fontStyle: "bold", textColor: [100, 100, 100], fontSize: 9 },
+      headStyles: { 
+        fontStyle: "bold", 
+        textColor: primaryPurple, // Headers now match your indigo theme
+        fontSize: 9,
+        cellPadding: { bottom: 4, top: 2 } 
+      },
       columnStyles: { 
         0: { cellWidth: "auto" }, 
         1: { halign: "center", cellWidth: 25 }, 
         2: { halign: "right", cellWidth: 35 }, 
         3: { halign: "right", cellWidth: 35, fontStyle: "bold" } 
       },
+      didDrawPage: (data) => {
+        // --- ADDING THE LINE UNDER HEADERS ---
+        doc.setDrawColor(...primaryPurple);
+        doc.setLineWidth(0.5);
+        // data.table.head[0].y + height of the cell
+        const headerBottomY = data.settings.startY + 8; 
+        doc.line(margin, headerBottomY, pageWidth - margin, headerBottomY);
+      },
       didParseCell: (data) => {
         if (data.section === 'head') {
           if (data.column.index === 1) data.cell.styles.halign = 'center';
           if (data.column.index >= 2) data.cell.styles.halign = 'right';
         }
-        data.cell.styles.borderBottom = 0.1;
+        // Subtle row separators
+        data.cell.styles.borderBottom = 0.05;
         data.cell.styles.lineColor = [240, 240, 240];
       }
     });
 
-    // 5. Total Line & Box
+    // 5. Total Section
     let finalY = doc.lastAutoTable.finalY + 10;
-    doc.setDrawColor(...accentColor); doc.setLineWidth(0.5);
+    doc.setDrawColor(...primaryPurple); doc.setLineWidth(0.5);
     doc.line(pageWidth - 95, finalY - 2, pageWidth - margin, finalY - 2);
 
     doc.setFillColor(249, 250, 251); doc.rect(pageWidth - 95, finalY, 80, 12, "F");
-    doc.setFont("helvetica", "bold"); doc.setTextColor(...accentColor);
+    doc.setFont("helvetica", "bold"); doc.setTextColor(...primaryPurple);
     doc.text(labels.due, pageWidth - 90, finalY + 8);
     doc.setTextColor(0); doc.text(`€ ${calculateTotal().toFixed(2)}`, pageWidth - margin - 5, finalY + 8, { align: "right" });
 
-    // 6. Footer (Payment & Notes)
+    // 6. Footer
     doc.setFontSize(10);
     if (invoice.paymentMethod) {
       doc.setFont("helvetica", "bold"); doc.text(labels.payment, margin, finalY + 20);
