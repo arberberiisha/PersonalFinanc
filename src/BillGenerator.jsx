@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useMemo } from "react";
 import { useTranslations } from "./LanguageContext";
 import Swal from "sweetalert2";
 import { motion, AnimatePresence } from "framer-motion";
@@ -6,15 +6,15 @@ import {
   Plus,
   Download,
   Image as ImageIcon,
-  Receipt,
-  User,
-  Mail,
-  Calendar,
   Trash2,
   Hash,
-  MapPin,
+  Calendar,
   CreditCard,
-  Notebook
+  Notebook,
+  Sparkles,
+  User,
+  MapPin,
+  Mail
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -34,6 +34,7 @@ const BillGenerator = () => {
     clientAddress: "",
     paymentMethod: "",
     notes: "",
+    hasVAT: false, 
     items: [{ description: "", quantity: 1, unit: "", price: 0 }],
   });
 
@@ -55,126 +56,110 @@ const BillGenerator = () => {
     setInvoice({ ...invoice, items: newItems });
   };
 
-  const calculateTotal = () => invoice.items.reduce((acc, item) => acc + (Number(item.quantity || 0) * Number(item.price || 0)), 0);
+  const subTotal = useMemo(() => 
+    invoice.items.reduce((acc, item) => acc + (Number(item.quantity || 0) * Number(item.price || 0)), 0)
+  , [invoice.items]);
+
+  const vatAmount = invoice.hasVAT ? subTotal * 0.18 : 0;
+  const grandTotal = subTotal + vatAmount;
 
   const handleDownloadPDF = () => {
-    if (!invoice.clientName.trim()) { Swal.fire("Error", "Please enter Client Name", "error"); return; }
+    if (!invoice.clientName.trim()) { 
+      Swal.fire({ icon: 'error', title: language === 'sq' ? 'Mungon Emri' : 'Missing Name', text: t.clientName }); 
+      return; 
+    }
+    
     const doc = new jsPDF("p", "mm", "a4");
     const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight(); // Get total page height (297mm)
-    const margin = 15;
+    const margin = 20; 
     const isSq = language === "sq";
     const primaryPurple = [79, 70, 229];
 
-    // Date logic
     const dateObj = new Date(invoice.date);
-    const day = dateObj.getDate();
-    const monthIndex = dateObj.getMonth();
-    const year = dateObj.getFullYear();
-    const monthTranslated = t.months[monthIndex];
-
+    const monthTranslated = t.months[dateObj.getMonth()];
     const formattedDate = isSq 
-      ? `${day} ${monthTranslated}, ${year}` 
-      : `${monthTranslated} ${day}, ${year}`;
+      ? `${dateObj.getDate()} ${monthTranslated}, ${dateObj.getFullYear()}` 
+      : `${monthTranslated} ${dateObj.getDate()}, ${dateObj.getFullYear()}`;
 
     const labels = {
       title: isSq ? "FATURË" : "INVOICE",
-      inv: isSq ? "NO:" : "NO:",
+      inv: isSq ? "Fatura Nr:" : "Invoice No:",
       date: isSq ? "Data:" : "Date:",
-      billedTo: isSq ? "Faturuar për:" : "Billed to:",
-      from: isSq ? "Nga:" : "From:",
-      colPuna: isSq ? "Përshkrimi i Punës" : "Description of Services",
-      colQty: isSq ? "Sasia" : "Qty",
-      colRate: isSq ? "Çmimi" : "Rate",
-      colTotal: isSq ? "Shuma" : "Total",
-      due: isSq ? "Gjithsej për pagesë" : "Total Amount Due",
+      billedTo: isSq ? "FATURUAR PËR:" : "BILLED TO:",
+      from: isSq ? "NGA:" : "FROM:",
       payment: isSq ? "Mënyra e pagesës:" : "Payment Method:",
+      vat: isSq ? "TVSH (18%):" : "VAT (18%):",
+      sub: isSq ? "Nëntotali:" : "Subtotal:",
+      due: isSq ? "GJITHSEJ PËR PAGESË" : "TOTAL AMOUNT DUE",
       note: isSq ? "Shënim:" : "Note:"
     };
 
-    // 1. Header Title
-    doc.setFontSize(22);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(...primaryPurple);
-    doc.text(labels.title, margin, 20);
+    doc.setFillColor(249, 250, 251);
+    doc.rect(0, 0, pageWidth, 45, 'F'); 
 
-    // Metadata Right
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.setFont("helvetica", "normal");
-    doc.text(`${labels.inv} ${invoice.invoiceNumber}`, pageWidth - margin, 20, { align: "right" });
-
-    // 2. Logo & Decorative Lines
     if (invoice.logo) {
-      try {
-        doc.addImage(invoice.logo, "PNG", margin, 25, 25, 15);
-      } catch (e) {}
+      try { doc.addImage(invoice.logo, "PNG", margin, 12, 35, 20); } catch (e) {}
+    } else {
+      doc.setFontSize(22); doc.setFont("helvetica", "bold"); doc.setTextColor(...primaryPurple);
+      doc.text("RB Tech", margin, 25);
     }
-    
-    doc.setDrawColor(230);
-    for (let i = 0; i < 6; i++) doc.line(45, 27 + (i * 2.2), 110, 27 + (i * 2.2));
 
-    doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-    doc.text(`${labels.date} ${formattedDate}`, margin, 50);
+    doc.setFontSize(24); doc.setFont("helvetica", "bold"); doc.setTextColor(31, 41, 55);
+    doc.text(labels.title, pageWidth - margin, 22, { align: "right" });
 
-    // 3. Address Columns
-    const infoY = 60;
-    doc.setTextColor(...primaryPurple); doc.text(labels.billedTo, margin, infoY);
+    doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.setTextColor(100);
+    doc.text(`${labels.inv} ${invoice.invoiceNumber}`, pageWidth - margin, 30, { align: "right" });
+    doc.text(`${labels.date} ${formattedDate}`, pageWidth - margin, 35, { align: "right" });
+
+    const infoY = 65;
+    doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...primaryPurple);
+    doc.text(labels.billedTo, margin, infoY);
     doc.text(labels.from, pageWidth / 2 + 10, infoY);
     
-    doc.setFont("helvetica", "normal"); doc.setTextColor(80);
-    doc.text(invoice.clientName || "---", margin, infoY + 6);
-    doc.text(invoice.clientAddress || "---", margin, infoY + 11);
-    doc.text(invoice.clientEmail || "---", margin, infoY + 16);
-    doc.text(invoice.senderName, pageWidth / 2 + 10, infoY + 6);
-    doc.text(invoice.senderAddress, pageWidth / 2 + 10, infoY + 11);
-    doc.text(invoice.senderEmail, pageWidth / 2 + 10, infoY + 16);
+    doc.setFont("helvetica", "normal"); doc.setTextColor(75);
+    doc.text([invoice.clientName, invoice.clientAddress, invoice.clientEmail].filter(Boolean), margin, infoY + 6);
+    doc.text([invoice.senderName, invoice.senderAddress, invoice.senderEmail], pageWidth / 2 + 10, infoY + 6);
 
-    // 4. Table
     autoTable(doc, {
-      startY: 88,
-      head: [[labels.colPuna, labels.colQty, labels.colRate, labels.colTotal]],
+      startY: 95,
+      head: [[isSq ? "Përshkrimi" : "Description", isSq ? "Sasia" : "Qty", isSq ? "Njësia" : "Unit", isSq ? "Çmimi" : "Price", "Total"]],
       body: invoice.items.map(i => [
         i.description || "---", 
-        `${i.quantity} ${i.unit ? i.unit.replace(/m2/gi, "m²") : ""}`.trim(), 
-        `€${Number(i.price).toFixed(2)}`, 
-        `€${(Number(i.quantity) * Number(i.price)).toFixed(2)}`
+        i.quantity, 
+        i.unit ? i.unit.replace(/m2/gi, "m²") : "-", 
+        `€${Number(i.price).toLocaleString(undefined, {minimumFractionDigits: 2})}`, 
+        `€${(Number(i.quantity) * Number(i.price)).toLocaleString(undefined, {minimumFractionDigits: 2})}`
       ]),
-      theme: "plain",
-      headStyles: { fontStyle: "bold", textColor: primaryPurple, fontSize: 9, cellPadding: { bottom: 4, top: 2 } },
-      columnStyles: { 0: { cellWidth: "auto" }, 1: { halign: "center", cellWidth: 25 }, 2: { halign: "right", cellWidth: 35 }, 3: { halign: "right", cellWidth: 35, fontStyle: "bold" } },
-      didDrawPage: (data) => {
-        doc.setDrawColor(...primaryPurple);
-        doc.setLineWidth(0.5);
-        const headerBottomY = data.settings.startY + 8; 
-        doc.line(margin, headerBottomY, pageWidth - margin, headerBottomY);
-      },
-      didParseCell: (data) => {
-        if (data.section === 'head') {
-          if (data.column.index === 1) data.cell.styles.halign = 'center';
-          if (data.column.index >= 2) data.cell.styles.halign = 'right';
-        }
-        data.cell.styles.borderBottom = 0.05;
-        data.cell.styles.lineColor = [240, 240, 240];
+      theme: "striped",
+      headStyles: { fillColor: primaryPurple, textColor: 255, fontSize: 10, fontStyle: 'bold' },
+      styles: { fontSize: 9, cellPadding: 5 },
+      columnStyles: {
+        1: { halign: "center" }, 2: { halign: "center" }, 3: { halign: "right" }, 4: { halign: "right", fontStyle: "bold" }
       }
     });
 
-    // 5. Total Section (Calculated relative to table end)
-    let totalY = doc.lastAutoTable.finalY + 10;
-    doc.setDrawColor(...primaryPurple); doc.setLineWidth(0.5);
-    doc.line(pageWidth - 95, totalY - 2, pageWidth - margin, totalY - 2);
+    let finalY = doc.lastAutoTable.finalY + 10;
+    const summaryX = pageWidth - margin - 60;
+    
+    doc.setFontSize(10); doc.setTextColor(100);
+    doc.text(labels.sub, summaryX, finalY);
+    doc.text(`€${subTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}`, pageWidth - margin, finalY, { align: "right" });
 
-    doc.setFillColor(249, 250, 251); doc.rect(pageWidth - 95, totalY, 80, 12, "F");
-    doc.setFont("helvetica", "bold"); doc.setTextColor(...primaryPurple);
-    doc.text(labels.due, pageWidth - 90, totalY + 8);
-    doc.setTextColor(0); doc.text(`€ ${calculateTotal().toFixed(2)}`, pageWidth - margin - 5, totalY + 8, { align: "right" });
+    if(invoice.hasVAT) {
+        doc.text(labels.vat, summaryX, finalY + 7);
+        doc.text(`€${vatAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}`, pageWidth - margin, finalY + 7, { align: "right" });
+        finalY += 7;
+    }
 
-    // 6. STICKY FOOTER LOGIC (Payment & Notes at the absolute bottom)
-    const footerY = pageHeight - 35; // Position 35mm from the very bottom of the page
-    doc.setFontSize(10);
-    doc.setDrawColor(230);
-    doc.setLineWidth(0.1);
-    doc.line(margin, footerY - 5, pageWidth - margin, footerY - 5); // Optional horizontal separator line
+    doc.setFillColor(...primaryPurple);
+    doc.rect(summaryX - 5, finalY + 5, 65, 12, "F");
+    doc.setFont("helvetica", "bold"); doc.setTextColor(255);
+    doc.text(labels.due, summaryX, finalY + 13);
+    doc.text(`€${grandTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}`, pageWidth - margin - 3, finalY + 13, { align: "right" });
+
+    const footerY = doc.internal.pageSize.getHeight() - 35;
+    doc.setDrawColor(230); doc.line(margin, footerY - 5, pageWidth - margin, footerY - 5);
+    doc.setFontSize(9); doc.setTextColor(80);
 
     if (invoice.paymentMethod) {
       doc.setFont("helvetica", "bold"); doc.setTextColor(0);
@@ -190,95 +175,147 @@ const BillGenerator = () => {
       doc.text(invoice.notes, margin + (isSq ? 15 : 12), footerY + 7);
     }
 
-    doc.save(`Invoice_${invoice.invoiceNumber}.pdf`);
+    doc.save(`${invoice.invoiceNumber}.pdf`);
   };
 
   return (
-    <div className="dashboard-card p-4 p-md-5">
-      <div className="d-flex justify-content-between border-bottom pb-4 mb-5">
-        <div>
-          <div className="mb-3">
-            <input type="file" accept="image/*" ref={logoInputRef} style={{ display: "none" }} onChange={handleLogoUpload} />
-            {invoice.logo ? (
-              <div className="position-relative d-inline-block" onMouseEnter={() => setLogoHover(true)} onMouseLeave={() => setLogoHover(false)}>
-                <img src={invoice.logo} alt="Logo" style={{ maxHeight: "80px", objectFit: "contain" }} />
-                {logoHover && (
-                  <button className="btn btn-sm btn-danger position-absolute top-0 start-100 translate-middle rounded-circle p-0 no-print" style={{ width: "20px", height: "20px" }} onClick={() => setInvoice({ ...invoice, logo: null })}>×</button>
-                )}
-              </div>
-            ) : (
-              <div className="no-print d-flex align-items-center gap-2 text-muted border rounded px-3 py-3 bg-light small" onClick={() => logoInputRef.current.click()} style={{ cursor: "pointer", borderStyle: "dashed", width: "fit-content" }}>
-                <ImageIcon size={20} /> {t.uploadLogo || "Upload Logo"}
-              </div>
-            )}
+    <div className="dashboard-card p-3 p-md-5">
+      {/* MOBILE CSS OVERRIDE */}
+      <style>{`
+        @media (max-width: 768px) {
+          .invoice-table thead { display: none; }
+          .invoice-table tr { 
+            display: block; 
+            margin-bottom: 1rem; 
+            padding: 1rem; 
+            background: #f8fafc; 
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+          }
+          .invoice-table td { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            border: none !important; 
+            padding: 0.5rem 0 !important;
+          }
+          .invoice-table td::before { 
+            content: attr(data-label); 
+            font-weight: 700; 
+            font-size: 0.75rem; 
+            text-transform: uppercase; 
+            color: #64748b;
+          }
+          .invoice-table input { text-align: right !important; width: 60% !important; }
+        }
+      `}</style>
+
+      {/* Header */}
+      <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center border-bottom pb-4 mb-4 mb-md-5 gap-4">
+        <div className="d-flex align-items-center gap-3 gap-md-4">
+          <div 
+            className="position-relative bg-white shadow-sm rounded-4 d-flex align-items-center justify-content-center overflow-hidden border border-dashed border-primary border-opacity-25"
+            style={{ width: "80px", height: "80px", minWidth: "80px", cursor: "pointer" }}
+            onClick={() => logoInputRef.current.click()}
+          >
+             {invoice.logo ? (
+                 <img src={invoice.logo} className="w-100 h-100 object-fit-contain p-2" alt="Logo" />
+             ) : (
+                 <div className="text-center text-muted">
+                     <ImageIcon size={20} className="mb-1 text-primary opacity-50" />
+                     <div style={{fontSize: '8px'}} className="fw-bold">LOGO</div>
+                 </div>
+             )}
+             <input type="file" ref={logoInputRef} className="d-none" onChange={handleLogoUpload} />
           </div>
-          <h2 className="fw-bold text-primary mb-0">{t.invoiceTitle}</h2>
+          <div>
+            <div className="d-flex align-items-center gap-2 mb-1">
+                <Sparkles size={16} className="text-warning d-none d-md-block" />
+                <h3 className="fw-bold text-primary mb-0">{t.invoiceTitle}</h3>
+            </div>
+            <div className="form-check form-switch p-0 m-0 d-flex align-items-center gap-2">
+                <input className="form-check-input ms-0 cursor-pointer" type="checkbox" checked={invoice.hasVAT} 
+                    onChange={e => setInvoice({...invoice, hasVAT: e.target.checked})} />
+                <label className="small fw-bold text-muted text-uppercase tracking-wider">VAT (18%)</label>
+            </div>
+          </div>
         </div>
-        <div className="text-end">
-          <label className="text-muted small fw-bold">TOTAL AMOUNT</label>
-          <h2 className="fw-bold display-5 text-dark mb-0">€{calculateTotal().toFixed(2)}</h2>
+        <div className="text-md-end w-100 w-md-auto bg-light bg-opacity-50 p-3 rounded-4 border-start border-primary border-4 border-md-0">
+          <label className="text-muted small fw-bold tracking-widest text-uppercase d-block">{language === 'sq' ? 'Shuma Totale' : 'Total Amount'}</label>
+          <h2 className="fw-bold text-dark mb-0">€{grandTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}</h2>
         </div>
       </div>
 
-      <div className="row g-4 mb-5">
-        <div className="col-md-4">
-          <label className="small fw-bold text-muted uppercase">Metadata</label>
-          <div className="input-group mb-2 border rounded-3 overflow-hidden shadow-sm">
-            <span className="input-group-text bg-white border-0"><Hash size={14} /></span>
-            <input type="text" className="form-control border-0" value={invoice.invoiceNumber} onChange={e => setInvoice({...invoice, invoiceNumber: e.target.value})} />
-          </div>
-          <div className="input-group border rounded-3 overflow-hidden shadow-sm">
-            <span className="input-group-text bg-white border-0"><Calendar size={14} /></span>
-            <input type="date" className="form-control border-0" value={invoice.date} onChange={e => setInvoice({...invoice, date: e.target.value})} />
+      {/* Grid - Metadata, From, To */}
+      <div className="row g-3 g-md-4 mb-4 mb-md-5">
+        <div className="col-12 col-md-4">
+          <div className="p-3 bg-light rounded-4 border border-white h-100">
+            <label className="extra-small fw-bold text-muted uppercase mb-2 d-flex align-items-center gap-2"><Hash size={12}/> Metadata</label>
+            <input type="text" className="form-control form-control-sm mb-2 border-0 bg-white shadow-sm" placeholder="Invoice #" value={invoice.invoiceNumber} onChange={e => setInvoice({...invoice, invoiceNumber: e.target.value})} />
+            <input type="date" className="form-control form-control-sm border-0 bg-white shadow-sm" value={invoice.date} onChange={e => setInvoice({...invoice, date: e.target.value})} />
           </div>
         </div>
-        <div className="col-md-4">
-          <label className="small fw-bold text-muted uppercase">From</label>
-          <input type="text" className="form-control mb-1 border-0 bg-light shadow-sm" placeholder="Your Name" value={invoice.senderName} onChange={e => setInvoice({...invoice, senderName: e.target.value})} />
-          <input type="text" className="form-control mb-1 border-0 bg-light shadow-sm" placeholder="Address" value={invoice.senderAddress} onChange={e => setInvoice({...invoice, senderAddress: e.target.value})} />
-          <input type="email" className="form-control border-0 bg-light shadow-sm" placeholder="Your Email" value={invoice.senderEmail} onChange={e => setInvoice({...invoice, senderEmail: e.target.value})} />
+        <div className="col-12 col-md-4">
+          <div className="p-3 bg-light rounded-4 border border-white h-100">
+            <label className="extra-small fw-bold text-muted uppercase mb-2 d-flex align-items-center gap-2"><User size={12}/> {language === 'sq' ? 'Nga' : 'From'}</label>
+            <input type="text" className="form-control form-control-sm mb-1 border-0 bg-white shadow-sm" placeholder={language === 'sq' ? 'Emri juaj' : 'Your Name'} value={invoice.senderName} onChange={e => setInvoice({...invoice, senderName: e.target.value})} />
+            <input type="text" className="form-control form-control-sm mb-1 border-0 bg-white shadow-sm" placeholder={language === 'sq' ? 'Adresa' : 'Address'} value={invoice.senderAddress} onChange={e => setInvoice({...invoice, senderAddress: e.target.value})} />
+            <div className="input-group">
+                <span className="input-group-text border-0 bg-white shadow-sm pe-0"><Mail size={12} className="text-muted"/></span>
+                <input type="email" className="form-control form-control-sm border-0 bg-white shadow-sm" placeholder="Email" value={invoice.senderEmail} onChange={e => setInvoice({...invoice, senderEmail: e.target.value})} />
+            </div>
+          </div>
         </div>
-        <div className="col-md-4">
-          <label className="small fw-bold text-muted uppercase">To</label>
-          <input type="text" className="form-control mb-1 border-0 bg-light shadow-sm" placeholder={t.clientName} value={invoice.clientName} onChange={e => setInvoice({...invoice, clientName: e.target.value})} />
-          <input type="text" className="form-control mb-1 border-0 bg-light shadow-sm" placeholder="Address" value={invoice.clientAddress} onChange={e => setInvoice({...invoice, clientAddress: e.target.value})} />
-          <input type="email" className="form-control border-0 bg-light shadow-sm" placeholder={t.clientEmail} value={invoice.clientEmail} onChange={e => setInvoice({...invoice, clientEmail: e.target.value})} />
+        <div className="col-12 col-md-4">
+          <div className="p-3 bg-light rounded-4 border border-white h-100">
+            <label className="extra-small fw-bold text-muted uppercase mb-2 d-flex align-items-center gap-2"><MapPin size={12}/> {language === 'sq' ? 'Për' : 'To'}</label>
+            <input type="text" className="form-control form-control-sm mb-1 border-0 bg-white shadow-sm" placeholder={t.clientName} value={invoice.clientName} onChange={e => setInvoice({...invoice, clientName: e.target.value})} />
+            <input type="text" className="form-control form-control-sm mb-1 border-0 bg-white shadow-sm" placeholder={language === 'sq' ? 'Adresa e klientit' : 'Client Address'} value={invoice.clientAddress} onChange={e => setInvoice({...invoice, clientAddress: e.target.value})} />
+            <div className="input-group">
+                <span className="input-group-text border-0 bg-white shadow-sm pe-0"><Mail size={12} className="text-muted"/></span>
+                <input type="email" className="form-control form-control-sm border-0 bg-white shadow-sm" placeholder={t.clientEmail} value={invoice.clientEmail} onChange={e => setInvoice({...invoice, clientEmail: e.target.value})} />
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="pf-table-wrapper">
-        <table className="invoice-table w-100">
-          <thead>
+      {/* Table - Header Fixed */}
+      <div className="border rounded-4 overflow-hidden shadow-sm mb-4">
+        <table className="invoice-table w-100 mb-0">
+          <thead className="bg-light"> 
             <tr>
-              <th className="text-start">{t.itemDesc}</th>
-              <th className="text-center" style={{ width: '80px' }}>{t.itemQty}</th>
-              <th className="text-center" style={{ width: '100px' }}>Unit</th>
-              <th className="text-end" style={{ width: '120px' }}>{t.itemPrice}</th>
-              <th className="text-end" style={{ width: '120px' }}>{t.total}</th>
-              <th className="no-print text-center" style={{ width: '50px' }}></th>
+              <th className="ps-4 py-3 text-secondary uppercase small fw-bold">{t.itemDesc}</th>
+              <th className="text-center text-secondary uppercase small fw-bold" style={{ width: '100px' }}>{t.itemQty}</th>
+              <th className="text-center text-secondary uppercase small fw-bold" style={{ width: '120px' }}>{language === 'sq' ? 'Njësia' : 'Unit'}</th>
+              <th className="text-end text-secondary uppercase small fw-bold" style={{ width: '140px' }}>{t.itemPrice}</th>
+              <th className="text-end pe-4 text-secondary uppercase small fw-bold" style={{ width: '140px' }}>{t.total}</th>
+              <th className="text-center" style={{ width: '50px' }}></th>
             </tr>
           </thead>
           <tbody>
             <AnimatePresence>
               {invoice.items.map((item, idx) => (
-                <motion.tr key={idx} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                  <td data-label={t.itemDesc} className="text-start">
-                    <input type="text" className="form-control border-0 bg-transparent p-0" placeholder="Service..." value={item.description} onChange={e => handleItemChange(idx, "description", e.target.value)} />
+                <motion.tr key={idx} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="border-bottom">
+                  <td data-label={t.itemDesc} className="ps-md-4 py-md-3">
+                    <input 
+                      type="text" 
+                      className="form-control form-control-sm border-0 bg-transparent p-0 fw-bold" 
+                      placeholder={language === 'sq' ? 'Përshkrimi i shërbimit...' : 'Description / Item...'} 
+                      value={item.description} 
+                      onChange={e => handleItemChange(idx, "description", e.target.value)} 
+                    />
                   </td>
-                  <td data-label={t.itemQty} className="text-center">
-                    <input type="number" className="form-control border-0 bg-transparent p-0 text-center" value={item.quantity === 0 ? "" : item.quantity} onChange={e => handleItemChange(idx, "quantity", e.target.value)} />
+                  <td data-label={t.itemQty}>
+                    <input type="number" className="form-control form-control-sm border-0 bg-transparent p-0 text-md-center" value={item.quantity} onChange={e => handleItemChange(idx, "quantity", e.target.value)} />
                   </td>
-                  <td data-label="Unit" className="text-center">
-                    <input type="text" className="form-control border-0 bg-transparent p-0 text-center" placeholder="e.g. m²" value={item.unit} onChange={e => handleItemChange(idx, "unit", e.target.value)} />
+                  <td data-label={language === 'sq' ? 'Njësia' : 'Unit'}>
+                    <input type="text" className="form-control form-control-sm border-0 bg-transparent p-0 text-md-center" placeholder="m² / hr" value={item.unit} onChange={e => handleItemChange(idx, "unit", e.target.value)} />
                   </td>
-                  <td data-label={t.itemPrice} className="text-end">
-                    <div className="d-flex justify-content-end align-items-center">
-                      <span className="small text-muted me-1">€</span>
-                      <input type="number" className="form-control border-0 bg-transparent p-0 text-end" style={{width:'70px'}} value={item.price === 0 ? "" : item.price} onChange={e => handleItemChange(idx, "price", e.target.value)} />
-                    </div>
+                  <td data-label={t.itemPrice}>
+                    <input type="number" className="form-control form-control-sm border-0 bg-transparent p-0 text-md-end fw-bold" value={item.price} onChange={e => handleItemChange(idx, "price", e.target.value)} />
                   </td>
-                  <td data-label={t.total} className="fw-bold text-end pe-2">€{(Number(item.quantity) * Number(item.price)).toFixed(2)}</td>
-                  <td className="no-print text-center" style={{ verticalAlign: 'middle' }}>
+                  <td data-label={t.total} className="text-md-end pe-md-4 fw-bold text-primary">€{(item.quantity * item.price).toLocaleString()}</td>
+                  <td className="text-center">
                     <button className="btn btn-link text-danger p-0" onClick={() => setInvoice({...invoice, items: invoice.items.filter((_, i) => i !== idx)})}><Trash2 size={16}/></button>
                   </td>
                 </motion.tr>
@@ -288,24 +325,43 @@ const BillGenerator = () => {
         </table>
       </div>
 
-      <div className="row g-4 mt-4 border-top pt-4">
-        <div className="col-md-6">
-          <div className="input-group mb-2 border rounded-3 shadow-sm overflow-hidden">
-            <span className="input-group-text bg-white border-0"><CreditCard size={16} className="text-muted" /></span>
-            <input type="text" className="form-control border-0" placeholder="Payment Method" value={invoice.paymentMethod} onChange={e => setInvoice({ ...invoice, paymentMethod: e.target.value })} />
-          </div>
+      {/* Totals & Notes Section */}
+      <div className="row g-4 justify-content-between align-items-end">
+        <div className="col-12 col-md-6 order-2 order-md-1">
+           <div className="p-3 bg-light rounded-4">
+              <label className="extra-small fw-bold text-muted text-uppercase mb-2 d-block">{language === 'sq' ? 'Pagesa & Termat' : 'Payment & Terms'}</label>
+              <div className="input-group mb-2 border-bottom shadow-none bg-transparent">
+                 <span className="input-group-text bg-transparent border-0 ps-0"><CreditCard size={14} /></span>
+                 <input type="text" className="form-control border-0 bg-transparent" placeholder={language === 'sq' ? 'Mënyra e pagesës / IBAN' : 'Payment Method / IBAN'} value={invoice.paymentMethod} onChange={e => setInvoice({ ...invoice, paymentMethod: e.target.value })} />
+              </div>
+              <div className="input-group bg-transparent shadow-none">
+                 <span className="input-group-text bg-transparent border-0 ps-0 pt-2 align-self-start"><Notebook size={14} /></span>
+                 <textarea 
+                    className="form-control border-0 bg-transparent" 
+                    placeholder={language === 'sq' ? 'Shënim...' : 'Note...'} 
+                    rows="2" 
+                    value={invoice.notes} 
+                    onChange={e => setInvoice({ ...invoice, notes: e.target.value })}
+                 />
+              </div>
+           </div>
         </div>
-        <div className="col-md-6">
-          <div className="input-group border rounded-3 shadow-sm overflow-hidden">
-            <span className="input-group-text bg-white border-0"><Notebook size={16} className="text-muted" /></span>
-            <input type="text" className="form-control border-0" placeholder="Notes" value={invoice.notes} onChange={e => setInvoice({ ...invoice, notes: e.target.value })} />
-          </div>
+        <div className="col-12 col-md-4 order-1 order-md-2">
+            <div className="card border-0 bg-primary bg-opacity-10 p-3 rounded-4 shadow-none">
+                <div className="d-flex justify-content-between small text-muted mb-1 fw-bold"><span>{language === 'sq' ? 'Nëntotali' : 'Subtotal'}</span><span>€{subTotal.toLocaleString()}</span></div>
+                {invoice.hasVAT && <div className="d-flex justify-content-between small text-muted mb-1 fw-bold"><span>VAT (18%)</span><span>€{vatAmount.toLocaleString()}</span></div>}
+                <hr className="my-2 border-primary border-opacity-25" />
+                <div className="d-flex justify-content-between fw-bold text-primary h4 mb-0"><span>{language === 'sq' ? 'Totali' : 'Grand Total'}</span><span>€{grandTotal.toLocaleString()}</span></div>
+            </div>
         </div>
       </div>
 
-      <div className="d-flex justify-content-between mt-5 border-top pt-4 no-print">
-        <button className="btn btn-white border shadow-sm px-4" onClick={() => setInvoice({...invoice, items: [...invoice.items, {description:"", quantity:1, unit:"", price:0}]})}><Plus size={18}/> {t.addItem}</button>
-        <button className="btn btn-primary shadow px-5" onClick={handleDownloadPDF}><Download size={18}/> {t.downloadInvoice}</button>
+      {/* Actions */}
+      <div className="d-flex flex-column flex-md-row justify-content-between mt-5 border-top pt-4 gap-3 no-print">
+        <button className="btn btn-outline-primary border-2 px-4 fw-bold rounded-3 shadow-sm d-flex align-items-center justify-content-center gap-2" 
+            onClick={() => setInvoice({...invoice, items: [...invoice.items, {description:"", quantity:1, unit:"", price:0}]})}><Plus size={18}/> {t.addItem}</button>
+        <button className="btn btn-primary btn-lg shadow px-5 fw-bold rounded-3 d-flex align-items-center justify-content-center gap-3" onClick={handleDownloadPDF}>
+            <Download size={22}/> {t.downloadInvoice}</button>
       </div>
     </div>
   );
