@@ -33,7 +33,7 @@ const BillGenerator = () => {
     clientEmail: "",
     clientAddress: "",
     paymentMethod: "",
-    notes: "",
+    notes: "Thank you for your business!", // Added default note here
     hasVAT: false, 
     items: [{ description: "", quantity: 1, unit: "", price: 0 }],
   });
@@ -71,6 +71,7 @@ const BillGenerator = () => {
     
     const doc = new jsPDF("p", "mm", "a4");
     const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
     const margin = 20; 
     const isSq = language === "sq";
     const primaryPurple = [79, 70, 229];
@@ -157,7 +158,7 @@ const BillGenerator = () => {
     doc.text(labels.due, summaryX, finalY + 13);
     doc.text(`€${grandTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}`, pageWidth - margin - 3, finalY + 13, { align: "right" });
 
-    const footerY = doc.internal.pageSize.getHeight() - 35;
+    const footerY = pageHeight - 35;
     doc.setDrawColor(230); doc.line(margin, footerY - 5, pageWidth - margin, footerY - 5);
     doc.setFontSize(9); doc.setTextColor(80);
 
@@ -279,16 +280,16 @@ const BillGenerator = () => {
         </div>
       </div>
 
-      {/* Table - Header Fixed */}
+      {/* Table */}
       <div className="border rounded-4 overflow-hidden shadow-sm mb-4">
         <table className="invoice-table w-100 mb-0">
-          <thead className="bg-light"> 
+          <thead className="bg-light d-none d-md-table-header-group">
             <tr>
-              <th className="ps-4 py-3 text-secondary uppercase small fw-bold">{t.itemDesc}</th>
-              <th className="text-center text-secondary uppercase small fw-bold" style={{ width: '100px' }}>{t.itemQty}</th>
-              <th className="text-center text-secondary uppercase small fw-bold" style={{ width: '120px' }}>{language === 'sq' ? 'Njësia' : 'Unit'}</th>
-              <th className="text-end text-secondary uppercase small fw-bold" style={{ width: '140px' }}>{t.itemPrice}</th>
-              <th className="text-end pe-4 text-secondary uppercase small fw-bold" style={{ width: '140px' }}>{t.total}</th>
+              <th className="ps-4 py-3">{t.itemDesc}</th>
+              <th className="text-center" style={{ width: '100px' }}>{t.itemQty}</th>
+              <th className="text-center" style={{ width: '120px' }}>{language === 'sq' ? 'Njësia' : 'Unit'}</th>
+              <th className="text-end" style={{ width: '140px' }}>{t.itemPrice}</th>
+              <th className="text-end pe-4" style={{ width: '140px' }}>{t.total}</th>
               <th className="text-center" style={{ width: '50px' }}></th>
             </tr>
           </thead>
@@ -297,13 +298,7 @@ const BillGenerator = () => {
               {invoice.items.map((item, idx) => (
                 <motion.tr key={idx} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="border-bottom">
                   <td data-label={t.itemDesc} className="ps-md-4 py-md-3">
-                    <input 
-                      type="text" 
-                      className="form-control form-control-sm border-0 bg-transparent p-0 fw-bold" 
-                      placeholder={language === 'sq' ? 'Përshkrimi i shërbimit...' : 'Description / Item...'} 
-                      value={item.description} 
-                      onChange={e => handleItemChange(idx, "description", e.target.value)} 
-                    />
+                    <input type="text" className="form-control form-control-sm border-0 bg-transparent p-0 fw-bold" placeholder="..." value={item.description} onChange={e => handleItemChange(idx, "description", e.target.value)} />
                   </td>
                   <td data-label={t.itemQty}>
                     <input type="number" className="form-control form-control-sm border-0 bg-transparent p-0 text-md-center" value={item.quantity} onChange={e => handleItemChange(idx, "quantity", e.target.value)} />
