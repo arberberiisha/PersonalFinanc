@@ -9,13 +9,14 @@ import {
   FileSpreadsheet, Trash2, Plus, FileText, Edit3, X, Check, Lock, Unlock,
   TrendingUp, TrendingDown, DollarSign, Camera, Tag, Calendar,
   Percent, AlertCircle, HeartPulse, PieChart, ShieldCheck, Sparkles,
-  Fuel, Receipt, Lightbulb, Activity
+  Receipt, Lightbulb, Activity
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 import "./FinanceModule.css";
 
+// Assuming these utils exist in your project structure
 import { exportToExcel } from "./utils/exportToExcel";
 import { uploadBillImage } from "./utils/billUploader";
 import { showError } from "./utils/showError";
@@ -63,8 +64,6 @@ const PersonalFinance = ({ darkMode }) => {
     taxType: "Rent",
   }));
 
-  const [sortBy, setSortBy] = useState(null);
-  const [sortDirection, setSortDirection] = useState("asc");
   const [page, setPage] = useState(1);
   const [perPage] = useState(20);
 
@@ -215,16 +214,6 @@ const PersonalFinance = ({ darkMode }) => {
     return balance > 0 ? balance * 0.20 : 0; 
   }, [balance]);
 
-  const topCategory = useMemo(() => {
-    if (filteredEntries.length === 0) return "---";
-    const categoryTotals = {};
-    filteredEntries.filter(e => e.type === "Expense").forEach(e => {
-        categoryTotals[e.category] = (categoryTotals[e.category] || 0) + Number(e.actual);
-    });
-    const sorted = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]);
-    return sorted.length > 0 ? sorted[0][0] : "---";
-  }, [filteredEntries]);
-
   const taxHealthAlerts = useMemo(() => {
     const alerts = [];
     const monthIncome = totalIncome;
@@ -245,7 +234,7 @@ const PersonalFinance = ({ darkMode }) => {
       });
     }
 
-    // 2. Pension Tip (Using TrendingDown per request)
+    // 2. Pension Tip
     const pensionTotal = filteredEntries
       .filter(e => e.category?.toLowerCase().includes("trust") || e.category?.toLowerCase().includes("pension"))
       .reduce((sum, e) => sum + Number(e.actual), 0);
@@ -260,12 +249,11 @@ const PersonalFinance = ({ darkMode }) => {
         });
     }
 
-    // 3. Operating Cost Tip (Professional & Vague)
-    const hasInternet = filteredEntries.some(e => e.category?.toLowerCase().includes("internet"));
+    // 3. Operating Cost Tip
     const hasFuel = filteredEntries.some(e => e.category?.toLowerCase().includes("naft") || e.category?.toLowerCase().includes("fuel"));
-    const hasUtilities = filteredEntries.some(e => e.category?.toLowerCase().includes("rrym") || e.category?.toLowerCase().includes("electric") || e.category?.toLowerCase().includes("ujë"));
+    const hasUtilities = filteredEntries.some(e => e.category?.toLowerCase().includes("rrym") || e.category?.toLowerCase().includes("electric"));
 
-    if ((!hasInternet || !hasFuel || !hasUtilities) && filteredEntries.length > 0) {
+    if ((!hasFuel || !hasUtilities) && filteredEntries.length > 0) {
       alerts.push({
         type: "missing",
         icon: <Receipt size={14} />, 
@@ -382,7 +370,7 @@ const PersonalFinance = ({ darkMode }) => {
         ))}
       </div>
 
-      {/* 2. BUSINESS HEALTH SCORECARD ROW */}
+      {/* 2. BUSINESS HEALTH SCORECARD */}
       <div className="row g-3 mb-4">
           <div className="col-12">
               <div className="pf-card border-0 bg-primary bg-opacity-10 shadow-none d-flex flex-wrap gap-4 align-items-center justify-content-between p-3">
@@ -408,7 +396,7 @@ const PersonalFinance = ({ darkMode }) => {
                           <span className="text-dark fw-bold">€{taxReserve.toLocaleString()}</span>
                       </div>
 
-                      {/* VAT THRESHOLD TRACKER */}
+                      {/* VAT THRESHOLD */}
                       <div className="text-center border-start ps-4">
                           <p className="text-muted extra-small fw-bold mb-1">{language === 'sq' ? 'LIMITI VJETOR TVSH' : 'YEARLY VAT LIMIT'} (€30k)</p>
                           <div className="d-flex align-items-center gap-2">
@@ -426,15 +414,15 @@ const PersonalFinance = ({ darkMode }) => {
                         className={`btn btn-sm shadow-sm d-flex align-items-center gap-2 ${showTaxTips ? 'btn-warning' : 'btn-light border'}`}
                         onClick={() => setShowTaxTips(!showTaxTips)}
                       >
-                         {showTaxTips ? <X size={14}/> : <Sparkles size={14} className="text-warning" />}
-                         <span className="fw-bold">{language === 'sq' ? 'Këshilla' : 'Get Tips'}</span>
+                          {showTaxTips ? <X size={14}/> : <Sparkles size={14} className="text-warning" />}
+                          <span className="fw-bold">{language === 'sq' ? 'Këshilla' : 'Get Tips'}</span>
                       </button>
                   </div>
               </div>
           </div>
       </div>
 
-      {/* SMART TAX SAVER SECTION (SHOWN ONLY ON REQUEST) */}
+      {/* SMART TAX SAVER */}
       <AnimatePresence>
         {showTaxTips && taxHealthAlerts.length > 0 && (
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mb-4 overflow-hidden">
@@ -459,7 +447,7 @@ const PersonalFinance = ({ darkMode }) => {
                     </div>
                   ))}
 
-                  {/* ATK COMPLIANCE WARNING */}
+                  {/* ATK WARNING */}
                   {yearToDateIncome > 25000 && (
                     <div className="mt-3 p-3 bg-danger bg-opacity-10 rounded border border-danger border-opacity-25 d-flex align-items-center gap-3">
                        <Activity size={20} className="text-danger" />
@@ -479,7 +467,7 @@ const PersonalFinance = ({ darkMode }) => {
         )}
       </AnimatePresence>
 
-      {/* 3. CHART AREA */}
+      {/* 3. CHART */}
       {entries.length > 0 && (
         <div className="pf-card shadow-sm border-0 no-print mb-4">
           <h5 className="fw-bold mb-4">{t.chartTitle || "Financial Flow"}</h5>
@@ -498,7 +486,7 @@ const PersonalFinance = ({ darkMode }) => {
         </div>
       )}
 
-      {/* 4. NEW ENTRY FORM GRID */}
+      {/* 4. NEW ENTRY FORM (FIXED RESPONSIVE GRID) */}
       <div className={`pf-card shadow-sm border-0 no-print mb-4 p-4 ${isCurrentMonthLocked ? 'locked-form' : ''} ${editingId ? 'border-primary border-opacity-50' : ''}`}>
         <div className="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
              <div className="d-flex flex-column gap-1">
@@ -529,7 +517,8 @@ const PersonalFinance = ({ darkMode }) => {
         </div>
 
         <div className="row g-3">
-            <div className="col-6 col-md-2">
+            {/* TYPE & AMOUNT */}
+            <div className="col-12 col-md-2">
                 <label className="small text-muted fw-bold mb-1">{t.type}</label>
                 <div className="input-group shadow-sm">
                     <span className="input-group-text bg-light"><TrendingUp size={16}/></span>
@@ -541,7 +530,7 @@ const PersonalFinance = ({ darkMode }) => {
                 </div>
             </div>
 
-            <div className="col-6 col-md-2">
+            <div className="col-12 col-md-2">
                 <label className="small text-muted fw-bold mb-1">{t.amount}</label>
                 <div className="input-group shadow-sm">
                     <span className="input-group-text bg-light"><DollarSign size={16}/></span>
@@ -552,33 +541,29 @@ const PersonalFinance = ({ darkMode }) => {
                 </div>
             </div>
 
-            <div className="col-6 col-md-2">
-                <label className="small text-muted fw-bold mb-1">Fiscal #</label>
-                <div className="input-group shadow-sm">
-                    <span className="input-group-text bg-light"><ShieldCheck size={16}/></span>
-                    <input 
-                        disabled={isCurrentMonthLocked} 
-                        type="text" 
-                        className="form-control" 
-                        placeholder="Supplier #" 
-                        value={form.fiscalNumber} 
-                        onChange={e => handleChange("fiscalNumber", e.target.value)} 
-                    />
-                </div>
-            </div>
-
+            {/* DATE & FISCAL */}
             <div className="col-12 col-md-2">
                 <label className="small text-muted fw-bold mb-1">{t.date}</label>
                 <div className="input-group shadow-sm">
                     <select className="form-select" value={form.month} onChange={e => handleChange("month", e.target.value)}>
                         {monthNames[language].map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
-                    <input type="number" className="form-control" style={{maxWidth: '90px'}} 
+                    <input type="number" className="form-control" style={{maxWidth: '80px'}} 
                         value={form.year} onChange={e => handleChange("year", parseInt(e.target.value))} />
                 </div>
             </div>
 
-            <div className="col-6 col-md-2">
+            <div className="col-12 col-md-2">
+                <label className="small text-muted fw-bold mb-1">Fiscal #</label>
+                <div className="input-group shadow-sm">
+                    <span className="input-group-text bg-light"><ShieldCheck size={16}/></span>
+                    <input disabled={isCurrentMonthLocked} type="text" className="form-control" placeholder="Supplier #" 
+                        value={form.fiscalNumber} onChange={e => handleChange("fiscalNumber", e.target.value)} />
+                </div>
+            </div>
+
+            {/* CATEGORY & DESCRIPTION */}
+            <div className="col-12 col-md-2">
                 <label className="small text-muted fw-bold mb-1">{t.category}</label>
                 <div className="input-group shadow-sm">
                     <span className="input-group-text bg-light"><Tag size={16}/></span>
@@ -587,7 +572,7 @@ const PersonalFinance = ({ darkMode }) => {
                 </div>
             </div>
 
-            <div className="col-6 col-md-2">
+            <div className="col-12 col-md-2">
                 <label className="small text-muted fw-bold mb-1">{t.description}</label>
                 <div className="input-group shadow-sm">
                     <span className="input-group-text bg-light"><FileText size={16}/></span>
@@ -596,11 +581,12 @@ const PersonalFinance = ({ darkMode }) => {
                 </div>
             </div>
 
+            {/* TAX TYPE (CONDITIONAL) */}
             <AnimatePresence>
             {form.hasWithholding && form.type === "Expense" && (
                 <motion.div initial={{opacity: 0, height: 0}} animate={{opacity: 1, height: 'auto'}} exit={{opacity: 0, height: 0}} className="col-12 overflow-hidden">
-                    <div className="p-3 bg-warning bg-opacity-10 rounded border border-warning border-opacity-25 mt-2 shadow-sm d-flex align-items-center gap-4">
-                        <div>
+                    <div className="p-3 bg-warning bg-opacity-10 rounded border border-warning border-opacity-25 mt-2 shadow-sm d-flex flex-column flex-md-row align-items-md-center gap-3">
+                        <div className="flex-grow-1">
                             <label className="small fw-bold text-warning text-uppercase mb-1">{t.taxType || "Tax Type"}</label>
                             <div className="input-group">
                                 <span className="input-group-text bg-warning bg-opacity-10 border-warning text-warning"><Percent size={14}/></span>
@@ -610,12 +596,13 @@ const PersonalFinance = ({ darkMode }) => {
                                 </select>
                             </div>
                         </div>
-                        <div className="small text-muted pt-3 fst-italic">{t.taxInfo || "Entering Net Amount. System records Gross Expense."}</div>
+                        <div className="small text-muted fst-italic">{t.taxInfo || "Entering Net Amount. System records Gross Expense."}</div>
                     </div>
                 </motion.div>
             )}
             </AnimatePresence>
 
+            {/* ACTION BUTTON */}
             <div className="col-12 mt-3">
                 <button 
                   disabled={isCurrentMonthLocked}
@@ -696,72 +683,6 @@ const PersonalFinance = ({ darkMode }) => {
           </table>
         </div>
       </div>
-
-      {/* --- EDIT POP-UP MODAL --- */}
-      <AnimatePresence>
-        {showEditModal && editingEntry && (
-            <div className="pf-modal-overlay">
-                <motion.div initial={{scale: 0.9, opacity: 0}} animate={{scale: 1, opacity: 1}} exit={{scale: 0.9, opacity: 0}} className="pf-modal-content">
-                    <div className="pf-modal-header d-flex justify-content-between align-items-center mb-4 border-bottom pb-2">
-                        <h5 className="fw-bold mb-0 text-primary">{t.newEntry} (Edit)</h5>
-                        <button className="btn-close" onClick={() => setShowEditModal(false)}></button>
-                    </div>
-                    <div className="row g-3">
-                        <div className="col-md-6">
-                            <label className="small fw-bold text-muted mb-1">{t.type}</label>
-                            <select className="form-select shadow-sm" value={editingEntry.type} onChange={e => setEditingEntry({...editingEntry, type: e.target.value})}>
-                                <option value="Income">{t.income}</option>
-                                <option value="Expense">{t.expense}</option>
-                            </select>
-                        </div>
-                        <div className="col-md-6">
-                            <label className="small fw-bold text-muted mb-1">{t.amount}</label>
-                            <div className="input-group shadow-sm">
-                                <span className="input-group-text bg-light"><DollarSign size={14}/></span>
-                                <input type="number" className="form-control fw-bold" value={editingEntry.actual} onChange={e => setEditingEntry({...editingEntry, actual: e.target.value})} />
-                            </div>
-                        </div>
-                        <div className="col-md-6">
-                            <label className="small fw-bold text-muted mb-1">Fiscal Number</label>
-                            <input type="text" className="form-control shadow-sm" value={editingEntry.fiscalNumber} onChange={e => setEditingEntry({...editingEntry, fiscalNumber: e.target.value})} />
-                        </div>
-                        <div className="col-md-6">
-                            <label className="small fw-bold text-muted mb-1">{t.category}</label>
-                            <input type="text" className="form-control shadow-sm" value={editingEntry.category} onChange={e => setEditingEntry({...editingEntry, category: e.target.value})} />
-                        </div>
-                        <div className="col-md-6">
-                            <label className="small fw-bold text-muted mb-1">{t.description}</label>
-                            <input type="text" className="form-control shadow-sm" value={editingEntry.description} onChange={e => setEditingEntry({...editingEntry, description: e.target.value})} />
-                        </div>
-                        
-                        {editingEntry.type === "Expense" && (
-                            <div className="col-12 mt-2">
-                                <div className="form-check form-switch bg-light p-2 rounded ps-5 shadow-sm">
-                                    <input className="form-check-input ms-0" type="checkbox" checked={editingEntry.hasWithholding} 
-                                        onChange={e => setEditingEntry({...editingEntry, hasWithholding: e.target.checked})} />
-                                    <label className="form-check-label fw-bold small ms-2">{t.applyTax}</label>
-                                </div>
-                                {editingEntry.hasWithholding && (
-                                    <select className="form-select mt-2 border-warning shadow-sm" value={editingEntry.taxType} onChange={e => setEditingEntry({...editingEntry, taxType: e.target.value})}>
-                                        <option value="Rent">{t.rent9}</option>
-                                        <option value="Service">{t.service10}</option>
-                                    </select>
-                                )}
-                            </div>
-                        )}
-                        <div className="col-12 mt-4 pt-3 border-top d-flex gap-2">
-                            <button className="btn btn-primary flex-grow-1 py-2 fw-bold shadow-sm" onClick={handleUpdateEntry}>
-                                <Check size={18} className="me-1"/> {t.save || 'Save'}
-                            </button>
-                            <button className="btn btn-light flex-grow-1 border py-2 fw-bold shadow-sm" onClick={() => setShowEditModal(false)}>
-                                {t.cancel || "Cancel"}
-                            </button>
-                        </div>
-                    </div>
-                </motion.div>
-            </div>
-        )}
-      </AnimatePresence>
 
       {/* 6. TOOLBAR ACTIONS */}
       <div className="pf-card shadow-sm border-0 no-print">

@@ -33,12 +33,11 @@ const BillGenerator = () => {
     clientEmail: "",
     clientAddress: "",
     paymentMethod: "",
-    notes: "Thank you for your business!", // Added default note here
+    notes: "Thank you for your business!", // <--- Default Note Added
     hasVAT: false, 
     items: [{ description: "", quantity: 1, unit: "", price: 0 }],
   });
 
-  const [logoHover, setLogoHover] = useState(false);
   const logoInputRef = useRef();
 
   const handleLogoUpload = (e) => {
@@ -71,7 +70,6 @@ const BillGenerator = () => {
     
     const doc = new jsPDF("p", "mm", "a4");
     const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
     const margin = 20; 
     const isSq = language === "sq";
     const primaryPurple = [79, 70, 229];
@@ -158,7 +156,7 @@ const BillGenerator = () => {
     doc.text(labels.due, summaryX, finalY + 13);
     doc.text(`€${grandTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}`, pageWidth - margin - 3, finalY + 13, { align: "right" });
 
-    const footerY = pageHeight - 35;
+    const footerY = doc.internal.pageSize.getHeight() - 35;
     doc.setDrawColor(230); doc.line(margin, footerY - 5, pageWidth - margin, footerY - 5);
     doc.setFontSize(9); doc.setTextColor(80);
 
@@ -180,34 +178,61 @@ const BillGenerator = () => {
   };
 
   return (
-    <div className="dashboard-card p-3 p-md-5">
-      {/* MOBILE CSS OVERRIDE */}
+    <div className="dashboard-card p-3 p-md-5 bg-white text-dark shadow-sm rounded-4">
+      {/* MOBILE OPTIMIZED CSS */}
       <style>{`
         @media (max-width: 768px) {
           .invoice-table thead { display: none; }
           .invoice-table tr { 
             display: block; 
             margin-bottom: 1rem; 
-            padding: 1rem; 
-            background: #f8fafc; 
+            padding: 1.5rem; 
+            background: #ffffff; 
             border-radius: 12px;
-            border: 1px solid #e2e8f0;
+            border: 1px solid #f1f5f9;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
           }
           .invoice-table td { 
             display: flex; 
             justify-content: space-between; 
             align-items: center; 
             border: none !important; 
-            padding: 0.5rem 0 !important;
+            padding: 0.75rem 0 !important;
+            border-bottom: 1px dashed #e2e8f0 !important;
           }
+          .invoice-table td:last-child { border-bottom: none !important; }
+          
           .invoice-table td::before { 
             content: attr(data-label); 
             font-weight: 700; 
-            font-size: 0.75rem; 
+            font-size: 0.7rem; 
             text-transform: uppercase; 
-            color: #64748b;
+            color: #94a3b8;
+            letter-spacing: 0.5px;
           }
-          .invoice-table input { text-align: right !important; width: 60% !important; }
+          
+          .invoice-table input { 
+            text-align: right !important; 
+            width: 60% !important; 
+            font-weight: 600;
+            color: #1e293b;
+          }
+
+          /* DESCRIPTION ROW FIX */
+          .invoice-table td:first-child {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.5rem;
+            border-bottom: 2px solid #e2e8f0 !important;
+            padding-bottom: 1rem !important;
+            margin-bottom: 0.5rem;
+          }
+          .invoice-table td:first-child input {
+            text-align: left !important;
+            width: 100% !important;
+            font-size: 1rem;
+            padding-left: 0;
+          }
         }
       `}</style>
 
@@ -247,7 +272,7 @@ const BillGenerator = () => {
         </div>
       </div>
 
-      {/* Grid - Metadata, From, To */}
+      {/* Grid */}
       <div className="row g-3 g-md-4 mb-4 mb-md-5">
         <div className="col-12 col-md-4">
           <div className="p-3 bg-light rounded-4 border border-white h-100">
@@ -283,13 +308,13 @@ const BillGenerator = () => {
       {/* Table */}
       <div className="border rounded-4 overflow-hidden shadow-sm mb-4">
         <table className="invoice-table w-100 mb-0">
-          <thead className="bg-light d-none d-md-table-header-group">
+          <thead className="bg-light"> 
             <tr>
-              <th className="ps-4 py-3">{t.itemDesc}</th>
-              <th className="text-center" style={{ width: '100px' }}>{t.itemQty}</th>
-              <th className="text-center" style={{ width: '120px' }}>{language === 'sq' ? 'Njësia' : 'Unit'}</th>
-              <th className="text-end" style={{ width: '140px' }}>{t.itemPrice}</th>
-              <th className="text-end pe-4" style={{ width: '140px' }}>{t.total}</th>
+              <th className="ps-4 py-3 text-secondary uppercase small fw-bold">{t.itemDesc}</th>
+              <th className="text-center text-secondary uppercase small fw-bold" style={{ width: '100px' }}>{t.itemQty}</th>
+              <th className="text-center text-secondary uppercase small fw-bold" style={{ width: '120px' }}>{language === 'sq' ? 'Njësia' : 'Unit'}</th>
+              <th className="text-end text-secondary uppercase small fw-bold" style={{ width: '140px' }}>{t.itemPrice}</th>
+              <th className="text-end pe-4 text-secondary uppercase small fw-bold" style={{ width: '140px' }}>{t.total}</th>
               <th className="text-center" style={{ width: '50px' }}></th>
             </tr>
           </thead>
@@ -298,7 +323,13 @@ const BillGenerator = () => {
               {invoice.items.map((item, idx) => (
                 <motion.tr key={idx} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="border-bottom">
                   <td data-label={t.itemDesc} className="ps-md-4 py-md-3">
-                    <input type="text" className="form-control form-control-sm border-0 bg-transparent p-0 fw-bold" placeholder="..." value={item.description} onChange={e => handleItemChange(idx, "description", e.target.value)} />
+                    <input 
+                      type="text" 
+                      className="form-control form-control-sm border-0 bg-transparent p-0 fw-bold" 
+                      placeholder={language === 'sq' ? 'Përshkrimi i shërbimit...' : 'Description / Item...'} 
+                      value={item.description} 
+                      onChange={e => handleItemChange(idx, "description", e.target.value)} 
+                    />
                   </td>
                   <td data-label={t.itemQty}>
                     <input type="number" className="form-control form-control-sm border-0 bg-transparent p-0 text-md-center" value={item.quantity} onChange={e => handleItemChange(idx, "quantity", e.target.value)} />

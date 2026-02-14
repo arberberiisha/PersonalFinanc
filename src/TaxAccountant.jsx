@@ -5,7 +5,7 @@ import { useTranslations } from "./LanguageContext";
 import { 
   UploadCloud, FileSpreadsheet, Download, 
   TrendingUp, TrendingDown, Building2, AlertCircle,
-  FileCheck, Trash2, CalendarCheck, Activity // Fixed missing Activity import
+  FileCheck, Trash2, CalendarCheck, Activity 
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -18,7 +18,6 @@ const TaxAccountant = () => {
   const [businessType, setBusinessType] = useState("LLC"); 
   const [companyName, setCompanyName] = useState("RB Tech");
   const [entries, setEntries] = useState([]);
-  // NEW FEATURE: Track metadata for uploaded files
   const [uploadedFiles, setUploadedFiles] = useState([]);
   
   const TAX_RATES = {
@@ -45,7 +44,6 @@ const TaxAccountant = () => {
       await workbook.xlsx.load(await file.arrayBuffer());
       const worksheet = workbook.getWorksheet(1);
       
-      // Store file info for the new display feature
       fileMetadata.push({ name: file.name, size: (file.size / 1024).toFixed(1) + " KB" });
 
       worksheet.eachRow((row, rowNumber) => {
@@ -56,7 +54,7 @@ const TaxAccountant = () => {
                     type: rowVal[3], 
                     category: rowVal[4],
                     amount: Number(rowVal[6]),
-                    month: rowVal[1] // Capture month for coverage check
+                    month: rowVal[1] 
                 });
             }
         }
@@ -173,12 +171,16 @@ const TaxAccountant = () => {
       }
     });
 
-    const finalY = doc.lastAutoTable.finalY + 10;
+    // --- FIX: Dynamic Footer Positioning ---
+    const finalY = doc.lastAutoTable.finalY + 15; // Increased margin
+    
+    // ADJUSTED RECTANGLE: moved left (100) and made wider (95) to fit long labels
     doc.setFillColor(245, 245, 245);
-    doc.rect(120, finalY, 75, 15, "F");
+    doc.rect(100, finalY - 8, 95, 18, "F"); 
+    
     doc.setFontSize(12); doc.setTextColor(0); doc.setFont("helvetica", "bold");
-    doc.text(t.totalPayable, 125, finalY + 10);
-    doc.text(`€ ${totalTaxLiability.toFixed(2)}`, 190, finalY + 10, { align: "right" });
+    doc.text(t.totalPayable, 105, finalY + 4); // Label aligned left inside box
+    doc.text(`€ ${totalTaxLiability.toFixed(2)}`, 190, finalY + 4, { align: "right" }); // Value aligned right
 
     doc.save(`${companyName}_Tax_Declaration_${year}.pdf`);
   };
@@ -284,7 +286,7 @@ const TaxAccountant = () => {
                 </div>
               </div>
 
-              {/* Right Side: NEW FEATURE - Source Verification Sidebar */}
+              {/* Right Side: Source Verification Sidebar */}
               <div className="col-lg-4">
                 <div className="card border h-100 bg-light bg-opacity-50 shadow-none">
                   <div className="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
