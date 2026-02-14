@@ -1,151 +1,210 @@
 /* =========================================
    PERSONAL FINANCE EXCLUSIVE STYLES
    ========================================= */
-.pf-container { max-width: 1200px; margin: 0 auto; padding: 1rem; overflow-x: hidden; }
+.pf-container { 
+    max-width: 1200px; 
+    margin: 0 auto; 
+    padding: 1rem; 
+    overflow-x: hidden; 
+}
 
 .pf-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 16px;
-  padding: 1.5rem;
-  box-shadow: var(--shadow-sm);
-  margin-bottom: 1.5rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 1.5rem;
 }
 
-/* Action Bar Styling */
-.pf-action-bar {
-  display: grid;
-  grid-template-columns: 1fr 1.2fr 1.5fr 1.5fr 1.2fr auto;
-  gap: 12px;
-  align-items: center;
-  background: rgba(248, 250, 252, 0.5);
-  padding: 12px;
-  border-radius: 14px;
-  border: 1px solid var(--border-color);
+/* --- Redesigned Form Controls --- */
+.input-group-text {
+    background-color: #f8fafc;
+    color: #94a3b8;
+    border-color: #e2e8f0;
 }
 
-.pf-input-wrapper {
-  position: relative;
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  padding: 0 10px;
-  height: 44px; /* Standardize height */
+.form-control, .form-select {
+    border-color: #e2e8f0;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
 }
 
-.pf-input-wrapper:focus-within {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.08);
+.form-control:focus, .form-select:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
 }
 
-.pf-input-icon { color: #94a3b8; margin-right: 8px; flex-shrink: 0; }
-
-.pf-field {
-  border: none !important;
-  background: transparent !important;
-  font-size: 0.85rem;
-  font-weight: 500;
-  width: 100%;
-  color: var(--text-main);
+/* Vertical Stack for Header */
+.extra-small {
+    font-size: 0.7rem;
 }
 
-.pf-field:focus { outline: none; }
-
-.pf-add-btn {
-  height: 44px;
-  width: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  background: var(--primary);
-  color: white;
-  border: none;
-  transition: all 0.2s;
-  flex-shrink: 0;
+/* Custom switch size adjustment */
+.form-check-input {
+    cursor: pointer;
 }
 
-.pf-add-btn:hover { background: var(--primary-hover); transform: translateY(-1px); }
+/* --- Table Alignment Fixes --- */
+.pf-table { 
+    width: 100%; 
+    border-collapse: separate; 
+    border-spacing: 0; 
+}
 
-/* Table Styling */
-.pf-table { width: 100%; border-collapse: separate; border-spacing: 0; }
 .pf-table th {
-  padding: 1rem;
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  border-bottom: 2px solid var(--border-color);
-  background: rgba(248, 250, 252, 0.8);
-  cursor: pointer;
+    background-color: #f8fafc;
+    color: #64748b;
+    font-size: 0.7rem;
+    padding: 0.8rem 1rem;
+    font-weight: 700;
 }
-.pf-table td { padding: 1rem; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
 
-/* Badges */
-.pf-stat-icon { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 12px; }
+.pf-table td {
+    vertical-align: middle !important; 
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Ensure Amount column content aligns right but stays a flex container */
+.amount-column {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end; 
+    justify-content: center;
+    line-height: 1.2;
+}
+
+/* Force Actions column to flex and center vertically regardless of row height */
+.actions-column {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    height: 100%;
+    min-height: 44px;
+}
+
+/* --- Badges & Stats --- */
+.pf-stat-icon { 
+    width: 44px; 
+    height: 44px; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    border-radius: 12px; 
+}
+
 .pf-income-bg { background: rgba(16, 185, 129, 0.1); color: #10b981; }
 .pf-expense-bg { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
 .pf-balance-bg { background: rgba(79, 70, 229, 0.1); color: #4f46e5; }
-.pf-badge { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
+
+.pf-badge { 
+    display: inline-block; 
+    padding: 4px 10px; 
+    border-radius: 6px; 
+    font-size: 0.7rem; 
+    font-weight: 700; 
+    text-transform: uppercase; 
+}
+
+/* --- Edit Pop-up Modal --- */
+.pf-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5); /* Semi-transparent black */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999; /* Ensure it stays on top of everything */
+    backdrop-filter: blur(5px); /* Professional blur effect */
+}
+
+.pf-modal-content {
+    background: white;
+    width: 90%;
+    max-width: 600px;
+    border-radius: 20px;
+    padding: 2.5rem;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    border: 1px solid #e2e8f0;
+}
+
+/* Perfect Vertical Alignment for Table Cells */
+.pf-table td {
+    vertical-align: middle !important;
+    padding: 1rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+/* --- Locking Status Styles --- */
+.locked-form {
+    background-color: #f1f5f9 !important;
+    border-color: #cbd5e1 !important;
+    position: relative;
+    opacity: 0.85;
+}
+
+.locked-form input, 
+.locked-form select, 
+.locked-form button.btn-primary {
+    cursor: not-allowed;
+    pointer-events: none;
+    filter: grayscale(1);
+}
 
 /* =========================================
    MOBILE & TABLET RESPONSIVENESS
    ========================================= */
 
-@media (max-width: 992px) {
-  .pf-action-bar { 
-    grid-template-columns: 1fr 1fr; /* 2 Column Brick Layout */
-    gap: 10px;
-  }
-  .pf-action-bar .pf-input-wrapper:nth-child(5), /* Description wrapper */
-  .pf-add-btn { 
-    grid-column: span 2; 
-    width: 100%; 
-  }
-}
-
 @media (max-width: 768px) {
-  .pf-table thead { display: none; }
-  .pf-table tr { 
-    display: block; 
-    border: 1px solid var(--border-color); 
-    border-radius: 12px; 
-    margin-bottom: 1rem; 
-    padding: 1rem; 
-    background: var(--bg-card);
-  }
-  .pf-table td { 
-    display: flex; 
-    justify-content: space-between; 
-    align-items: center; 
-    border: none !important; 
-    padding: 0.6rem 0 !important; 
-    text-align: right;
-  }
-  .pf-table td::before { 
-    content: attr(data-label); 
-    font-weight: 700; 
-    color: var(--text-muted); 
-    font-size: 0.75rem; 
-    text-transform: uppercase;
-    text-align: left;
-  }
+    .pf-table thead { display: none; }
+    
+    .pf-table tr { 
+        display: block; 
+        border: 1px solid var(--border-color); 
+        border-radius: 12px; 
+        margin-bottom: 1rem; 
+        padding: 1rem; 
+        background: var(--bg-card);
+    }
+    
+    .pf-table td { 
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center; 
+        border: none !important; 
+        padding: 0.6rem 0 !important; 
+    }
+    
+    .pf-table td::before { 
+        content: attr(data-label); 
+        font-weight: 700; 
+        color: var(--text-muted); 
+        font-size: 0.75rem; 
+        text-transform: uppercase;
+        text-align: left;
+    }
+
+    .amount-column {
+        align-items: flex-end;
+    }
+
+    .actions-column {
+        justify-content: flex-end;
+        width: 100%;
+    }
 }
 
 @media (max-width: 576px) {
-  .pf-action-bar { 
-    grid-template-columns: 1fr; /* Single Column Stack */
-  }
-  .pf-action-bar .pf-input-wrapper:nth-child(5),
-  .pf-add-btn { 
-    grid-column: span 1; 
-  }
-  .pf-field {
-    font-size: 16px !important; /* Prevents iOS auto-zoom on focus */
-  }
-  .pf-input-wrapper {
-    height: 48px; /* Larger touch target */
-  }
+    .pf-card {
+        padding: 1rem;
+    }
+    
+    .btn-sm {
+        width: 100%; /* Stack action buttons on tiny screens */
+        margin-bottom: 0.5rem;
+    }
 }

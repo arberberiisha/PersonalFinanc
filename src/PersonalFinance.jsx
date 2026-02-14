@@ -1,4 +1,4 @@
-import React, { useRef, useState, useMemo } from "react";
+import React, { useRef, useState, useMemo, useEffect } from "react";
 import Swal from "sweetalert2";
 import { useTranslations } from "./LanguageContext";
 import { motion, AnimatePresence } from "framer-motion";
@@ -6,8 +6,10 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
 } from 'recharts';
 import { 
-  FileSpreadsheet, Trash2, Edit3, Plus, FileText, 
-  TrendingUp, TrendingDown, DollarSign, Camera, Tag, Calendar
+  FileSpreadsheet, Trash2, Plus, FileText, Edit3, X, Check, Lock, Unlock,
+  TrendingUp, TrendingDown, DollarSign, Camera, Tag, Calendar,
+  Percent, AlertCircle, HeartPulse, PieChart, ShieldCheck, Sparkles,
+  Fuel, Receipt, Lightbulb, Activity
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -17,10 +19,10 @@ import "./FinanceModule.css";
 import { exportToExcel } from "./utils/exportToExcel";
 import { uploadBillImage } from "./utils/billUploader";
 import { showError } from "./utils/showError";
+import { exportToATK } from "./utils/exportToATK"; 
 
 const PersonalFinance = ({ darkMode }) => {
   const { translations: t, language } = useTranslations();
-  
   const getSavedMonth = () => localStorage.getItem("lastMonth");
 
   const monthNames = {
@@ -34,51 +36,247 @@ const PersonalFinance = ({ darkMode }) => {
   };
 
   const [entries, setEntries] = useState([]);
+  const [editingId, setEditingId] = useState(null);
+  const [showTaxTips, setShowTaxTips] = useState(false); 
+
+  const [lockedMonths, setLockedMonths] = useState(() => {
+    const saved = localStorage.getItem("lockedMonths");
+    return saved ? JSON.parse(saved) : []; 
+  });
+
+  useEffect(() => {
+    localStorage.setItem("lockedMonths", JSON.stringify(lockedMonths));
+  }, [lockedMonths]);
   
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingEntry, setEditingEntry] = useState(null);
+
   const [form, setForm] = useState(() => ({
     type: "Expense",
     category: "",
     description: "",
     actual: "",
+    fiscalNumber: "",
     month: getSavedMonth() || getCurrentMonth(language),
     year: new Date().getFullYear(),
+    hasWithholding: false,
+    taxType: "Rent",
   }));
 
   const [sortBy, setSortBy] = useState(null);
   const [sortDirection, setSortDirection] = useState("asc");
-  const [perPage] = useState(20);
   const [page, setPage] = useState(1);
+  const [perPage] = useState(20);
 
   const imageInputRef = useRef();
   const excelInputRef = useRef();
+
+  const isCurrentMonthLocked = useMemo(() => {
+    return lockedMonths.includes(`${form.month} ${form.year}`);
+  }, [lockedMonths, form.month, form.year]);
 
   const handleChange = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }));
   };
 
+  const calculateWithholding = (netAmount, type) => {
+    const net = Number(netAmount);
+    let rate = type === "Rent" ? 0.09 : 0.10;
+    const gross = net / (1 - rate);
+    const tax = gross - net;
+    return { gross, tax, net };
+  };
+
+  const toggleMonthLock = () => {
+    const key = `${form.month} ${form.year}`;
+    if (lockedMonths.includes(key)) {
+      setLockedMonths(prev => prev.filter(m => m !== key));
+      Swal.fire({ icon: 'info', title: language === 'sq' ? 'U zhbllokua' : 'Unlocked', text: `${key}`, timer: 1500 });
+    } else {
+      setLockedMonths(prev => [...prev, key]);
+      Swal.fire({ icon: 'success', title: language === 'sq' ? 'U bllokua' : 'Locked', text: `${key}`, timer: 1500 });
+    }
+  };
+
+  const startEdit = (entry) => {
+    if (lockedMonths.includes(`${entry.month} ${entry.year}`)) {
+        Swal.fire("Locked", t.lockedMessage || (language === 'sq' ? 'Ky muaj është i mbyllur.' : 'This month is closed.'), "warning");
+        return;
+    }
+    handleOpenEdit(entry);
+  };
+
+  const handleOpenEdit = (entry) => {
+    const netVal = entry.taxDetails ? entry.taxDetails.netAmount : entry.actual;
+    setEditingEntry({
+        ...entry,
+        actual: netVal,
+        hasWithholding: !!entry.taxDetails,
+        taxType: entry.taxDetails ? entry.taxDetails.type : "Rent",
+        fiscalNumber: entry.fiscalNumber || "" 
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateEntry = () => {
+    let finalAmount = Number(editingEntry.actual);
+    let taxDetails = null;
+
+    if (editingEntry.type === "Expense" && editingEntry.hasWithholding) {
+        const { gross, tax, net } = calculateWithholding(editingEntry.actual, editingEntry.taxType);
+        finalAmount = gross;
+        taxDetails = { type: editingEntry.taxType, netAmount: net, taxAmount: tax };
+    }
+
+    setEntries(prev => prev.map(e => e.id === editingEntry.id ? { 
+        ...editingEntry, 
+        actual: finalAmount, 
+        taxDetails: taxDetails 
+    } : e));
+    
+    setShowEditModal(false);
+    setEditingEntry(null);
+    Swal.fire({ icon: 'success', title: t.updated || 'Updated', timer: 1000, showConfirmButton: false });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setForm({
+      type: "Expense",
+      category: "",
+      description: "",
+      actual: "",
+      month: getSavedMonth() || getCurrentMonth(language),
+      year: new Date().getFullYear(),
+      hasWithholding: false,
+      taxType: "Rent",
+      fiscalNumber: ""
+    });
+  };
+
   const addEntry = () => {
+    if (isCurrentMonthLocked) {
+        Swal.fire("Locked", t.lockedMessage || (language === 'sq' ? 'Ky muaj është i mbyllur.' : 'This month is closed.'), "error");
+        return;
+    }
     if (form.actual && form.category) {
-      setEntries(prev => [
-        ...prev,
-        {
-          ...form,
-          actual: Number(form.actual),
-          description: form.description || "",
-        },
-      ]);
-      setForm(prev => ({
-        ...prev,
-        category: "",
-        description: "",
-        actual: "",
-      }));
+        let finalAmount = Number(form.actual);
+        let taxDetails = null;
+
+        if (form.type === "Expense" && form.hasWithholding) {
+            const { gross, tax, net } = calculateWithholding(form.actual, form.taxType);
+            finalAmount = gross;
+            taxDetails = { type: form.taxType, netAmount: net, taxAmount: tax };
+        }
+
+        const entryData = { 
+            ...form, 
+            id: editingId || Date.now() + Math.random(), 
+            actual: finalAmount, 
+            description: form.description || "", 
+            taxDetails: taxDetails 
+        };
+
+        if (editingId) {
+            setEntries(prev => prev.map(e => e.id === editingId ? entryData : e));
+            setEditingId(null);
+        } else {
+            setEntries(prev => [...prev, entryData]);
+        }
+
+        setForm(prev => ({ ...prev, category: "", description: "", actual: "", hasWithholding: false, fiscalNumber: "" }));
     }
     localStorage.setItem("lastMonth", form.month);
   };
 
-  const totalIncome = entries.filter((e) => e.type === "Income").reduce((acc, e) => acc + Number(e.actual), 0);
-  const totalExpense = entries.filter((e) => e.type === "Expense").reduce((acc, e) => acc + Number(e.actual), 0);
+  // --- FILTERED DATA FOR CURRENT VIEW ---
+  const filteredEntries = useMemo(() => {
+    return entries.filter(e => e.month === form.month && e.year === form.year);
+  }, [entries, form.month, form.year]);
+
+  // --- YEAR-TO-DATE VAT CALCULATION ---
+  const yearToDateIncome = useMemo(() => {
+    return entries
+      .filter(e => e.year === form.year && e.type === "Income")
+      .reduce((sum, e) => sum + Number(e.actual), 0);
+  }, [entries, form.year]);
+
+  const vatLimitProgress = (yearToDateIncome / 30000) * 100;
+
+  const totalIncome = filteredEntries.filter((e) => e.type === "Income").reduce((acc, e) => acc + Number(e.actual), 0);
+  const totalExpense = filteredEntries.filter((e) => e.type === "Expense").reduce((acc, e) => acc + Number(e.actual), 0);
   const balance = totalIncome - totalExpense;
+
+  const profitMargin = useMemo(() => {
+    return totalIncome > 0 ? ((balance / totalIncome) * 100).toFixed(1) : 0;
+  }, [totalIncome, balance]);
+
+  const taxReserve = useMemo(() => {
+    return balance > 0 ? balance * 0.20 : 0; 
+  }, [balance]);
+
+  const topCategory = useMemo(() => {
+    if (filteredEntries.length === 0) return "---";
+    const categoryTotals = {};
+    filteredEntries.filter(e => e.type === "Expense").forEach(e => {
+        categoryTotals[e.category] = (categoryTotals[e.category] || 0) + Number(e.actual);
+    });
+    const sorted = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]);
+    return sorted.length > 0 ? sorted[0][0] : "---";
+  }, [filteredEntries]);
+
+  const taxHealthAlerts = useMemo(() => {
+    const alerts = [];
+    const monthIncome = totalIncome;
+    
+    // 1. Sponsorship Tip
+    const sponsorshipTotal = filteredEntries
+      .filter(e => e.category?.toLowerCase().includes("sponsor"))
+      .reduce((sum, e) => sum + Number(e.actual), 0);
+    const maxMonthlySponsor = monthIncome * 0.10;
+    if (sponsorshipTotal < maxMonthlySponsor && monthIncome > 0) {
+      const remaining = (maxMonthlySponsor - sponsorshipTotal).toFixed(2);
+      alerts.push({
+        type: "saving",
+        icon: <Sparkles size={14} />,
+        text: language === 'sq' 
+          ? `Sponsorizime: Mund të zbritni edhe €${remaining} këtë muaj.` 
+          : `Sponsorships: You can deduct €${remaining} more this month.`
+      });
+    }
+
+    // 2. Pension Tip (Using TrendingDown per request)
+    const pensionTotal = filteredEntries
+      .filter(e => e.category?.toLowerCase().includes("trust") || e.category?.toLowerCase().includes("pension"))
+      .reduce((sum, e) => sum + Number(e.actual), 0);
+    const pensionThreshold = monthIncome * 0.15;
+    if (pensionTotal < pensionThreshold && monthIncome > 0) {
+        alerts.push({
+            type: "pension",
+            icon: <TrendingDown size={14} />,
+            text: language === 'sq'
+              ? "Këshillë: Konsideroni kontributet vullnetare për të ulur bazën tatimore."
+              : "Tax Tip: Consider voluntary contributions to lower your taxable base."
+        });
+    }
+
+    // 3. Operating Cost Tip (Professional & Vague)
+    const hasInternet = filteredEntries.some(e => e.category?.toLowerCase().includes("internet"));
+    const hasFuel = filteredEntries.some(e => e.category?.toLowerCase().includes("naft") || e.category?.toLowerCase().includes("fuel"));
+    const hasUtilities = filteredEntries.some(e => e.category?.toLowerCase().includes("rrym") || e.category?.toLowerCase().includes("electric") || e.category?.toLowerCase().includes("ujë"));
+
+    if ((!hasInternet || !hasFuel || !hasUtilities) && filteredEntries.length > 0) {
+      alerts.push({
+        type: "missing",
+        icon: <Receipt size={14} />, 
+        text: language === 'sq' 
+          ? `Kujtesë: Sigurohuni që të gjitha shpenzimet operative për muajin ${form.month} janë regjistruar.` 
+          : `Reminder: Ensure all business operating costs for ${form.month} are logged.`
+      });
+    }
+
+    return alerts;
+  }, [filteredEntries, totalIncome, language, form.month]);
 
   const chartData = useMemo(() => {
     const data = {};
@@ -91,187 +289,81 @@ const PersonalFinance = ({ darkMode }) => {
     return Object.values(data);
   }, [entries]);
 
-  // --- PROFESSIONAL PDF EXPORT LOGIC ---
   const handleDownloadFinancePDF = async () => {
-    if (entries.length === 0) {
-      Swal.fire("Info", "No entries to export", "info");
+    if (filteredEntries.length === 0) {
+      Swal.fire("Info", language === 'sq' ? 'Nuk ka shënime për këtë muaj' : "No entries to export for this month", "info");
       return;
     }
-
     const { value: fileName } = await Swal.fire({ 
-      title: t.enterFileName, 
-      input: "text",
-      inputValue: `Report_${new Date().getFullYear()}`
+      title: t.enterFileName, input: "text", inputValue: `Report_${form.month}_${form.year}`
     });
-
     if (!fileName) return;
 
     const doc = new jsPDF("p", "mm", "a4");
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const margin = 15;
-    const isSq = language === "sq";
-    const primaryPurple = [79, 70, 229];
-
-    // Date Logic
-    const now = new Date();
-    const monthTranslated = monthNames[language][now.getMonth()];
-    const formattedDate = isSq 
-      ? `${now.getDate()} ${monthTranslated}, ${now.getFullYear()}` 
-      : `${monthTranslated} ${now.getDate()}, ${now.getFullYear()}`;
-
-    // 1. Header (Matches Invoice Style)
-    doc.setFontSize(22);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(...primaryPurple);
-    doc.text(t.title.toUpperCase(), margin, 20);
-
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.setFont("helvetica", "normal");
-    doc.text(`${t.date}: ${formattedDate}`, pageWidth - margin, 20, { align: "right" });
-
-    // 2. Stats Summary Box
-    const statsY = 35;
-    doc.setFillColor(249, 250, 251);
-    doc.rect(margin, statsY, pageWidth - (margin * 2), 22, "F");
-    
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(100);
-    doc.text(t.totalIncome.toUpperCase(), margin + 5, statsY + 8);
-    doc.text(t.totalExpense.toUpperCase(), (pageWidth / 3) + 10, statsY + 8);
-    doc.text(t.balance.toUpperCase(), (pageWidth * 2 / 3) + 10, statsY + 8);
-
-    doc.setFontSize(12);
-    doc.setTextColor(16, 185, 129); // Green
-    doc.text(`+€${totalIncome.toLocaleString()}`, margin + 5, statsY + 16);
-    doc.setTextColor(239, 68, 68); // Red
-    doc.text(`-€${totalExpense.toLocaleString()}`, (pageWidth / 3) + 10, statsY + 16);
-    doc.setTextColor(...primaryPurple); // Purple
-    doc.text(`€${balance.toLocaleString()}`, (pageWidth * 2 / 3) + 10, statsY + 16);
-
-    // 3. Transactions Table
     autoTable(doc, {
       startY: 65,
-      head: [[t.month, t.category, t.description, t.amount]],
-      body: sortedEntries.map(e => [
-        `${e.month} ${e.year}`,
-        e.category,
-        e.description || "---",
+      head: [[t.month, t.category, t.description, "Tax Info", t.amount]],
+      body: [...filteredEntries].map(e => [
+        `${e.month} ${e.year}`, e.category, e.description || "---",
+        e.taxDetails ? `${e.taxDetails.type} Tax: €${e.taxDetails.taxAmount.toFixed(2)}` : "-",
         `${e.type === 'Income' ? '+' : '-'}€${Number(e.actual).toLocaleString()}`
       ]),
-      theme: "plain",
-      headStyles: { fontStyle: "bold", textColor: primaryPurple, fontSize: 9, cellPadding: { bottom: 4, top: 2 } },
-      columnStyles: { 
-        0: { cellWidth: 35 }, 
-        1: { cellWidth: 40 }, 
-        2: { cellWidth: "auto" }, 
-        3: { halign: "right", fontStyle: "bold" } 
-      },
-      didDrawPage: (data) => {
-        doc.setDrawColor(...primaryPurple);
-        doc.setLineWidth(0.5);
-        const headerBottomY = data.settings.startY + 8; 
-        if (data.pageNumber === 1) doc.line(margin, headerBottomY, pageWidth - margin, headerBottomY);
-      },
-      didParseCell: (data) => {
-        if (data.column.index === 3 && data.section === 'body') {
-            const val = data.cell.raw;
-            if (val.includes('+')) data.cell.styles.textColor = [16, 185, 129];
-            if (val.includes('-')) data.cell.styles.textColor = [239, 68, 68];
-        }
-        data.cell.styles.borderBottom = 0.05;
-        data.cell.styles.lineColor = [240, 240, 240];
-      }
     });
-
     doc.save(`${fileName}.pdf`);
-  };
-
-  const clearAllEntries = async () => {
-    const result = await Swal.fire({
-      title: t.clearConfirmTitle,
-      text: t.clearConfirmText,
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#ef4444",
-      confirmButtonText: t.confirm,
-    });
-    if (result.isConfirmed) setEntries([]);
   };
 
   const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
-    const ExcelJS = await import("exceljs");
+    let ExcelJS;
+    try { ExcelJS = await import("exceljs"); } catch (error) { return; }
     const allEntries = [];
+
+    const isValidMonth = (val) => {
+        if (!val) return false;
+        const s = val.toString().trim().toLowerCase();
+        return [...monthNames.en, ...monthNames.sq].some(m => s.includes(m.toLowerCase()));
+    };
 
     for (const file of files) {
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(await file.arrayBuffer());
       const worksheet = workbook.getWorksheet(1);
-      const headers = worksheet.getRow(2).values.map((h) => h?.toString()?.toLowerCase()?.trim());
-      const getColIndex = (name) => headers.findIndex((h) => h === name.toLowerCase());
-
-      const colMonth = getColIndex("month"), colYear = getColIndex("year"), colType = getColIndex("type"),
-            colCategory = getColIndex("category"), colDescription = getColIndex("description"), colActual = getColIndex("amount");
-
       worksheet.eachRow((row, rowNumber) => {
         if (rowNumber <= 2) return;
         const values = row.values;
-        if (values[colMonth] && values[colActual]) {
+        if (values[1] && isValidMonth(values[1])) {
             allEntries.push({
-                month: values[colMonth].toString(),
-                year: values[colYear] ? parseInt(values[colYear]) : null,
-                type: values[colType],
-                category: values[colCategory],
-                description: values[colDescription] || "",
-                actual: Number(values[colActual]),
+                id: Date.now() + Math.random(),
+                month: values[1].toString(),
+                year: values[2] ? parseInt(values[2]) : new Date().getFullYear(),
+                type: values[3] || "Expense",
+                category: values[4] || "General",
+                description: values[5] || "",
+                actual: Number(values[6]),
+                fiscalNumber: "" 
             });
         }
       });
     }
     setEntries((prev) => [...prev, ...allEntries]);
+    e.target.value = null; 
   };
 
   const handleBillImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    try {
-      await uploadBillImage({ file, setEntries });
-    } catch (err) {
-      showError(t.aiUnavailableTitle, t.aiUnavailableMessage);
-    }
+    try { await uploadBillImage({ file, setEntries }); } catch (err) { showError(t.aiUnavailableTitle, t.aiUnavailableMessage); }
   };
 
-  const sortedEntries = useMemo(() => {
-    const getMonthIndex = (m) => monthNames[language].indexOf(m);
-    let data = [...entries].sort((a, b) => {
-      if (a.year !== b.year) return (b.year || 0) - (a.year || 0);
-      return getMonthIndex(b.month) - getMonthIndex(a.month);
-    });
-
-    if (sortBy) {
-      data.sort((a, b) => {
-        let aVal = a[sortBy], bVal = b[sortBy];
-        if (typeof aVal === "string") { aVal = aVal.toLowerCase(); bVal = bVal.toLowerCase(); }
-        return sortDirection === "asc" ? (aVal > bVal ? 1 : -1) : (aVal < bVal ? 1 : -1);
-      });
-    }
-    return data;
-  }, [entries, sortBy, sortDirection, language]);
-
-  const paginated = sortedEntries.slice((page - 1) * perPage, page * perPage);
-
-  const toggleSort = (field) => {
-    setSortDirection(prev => sortBy === field && prev === "asc" ? "desc" : "asc");
-    setSortBy(field);
-  };
+  const paginated = useMemo(() => {
+    return filteredEntries.slice((page - 1) * perPage, page * perPage);
+  }, [filteredEntries, page, perPage]);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pf-container">
       
-      {/* 1. DASHBOARD STATS */}
+      {/* 1. STATS CARDS */}
       <div className="row g-4 mb-4">
         {[
           { label: t.totalIncome, val: totalIncome, icon: <TrendingUp/>, color: "pf-income-bg" },
@@ -279,27 +371,124 @@ const PersonalFinance = ({ darkMode }) => {
           { label: t.balance, val: balance, icon: <DollarSign/>, color: "pf-balance-bg" }
         ].map((card, i) => (
           <div key={i} className="col-12 col-md-4">
-            <div className="pf-card">
+            <div className="pf-card shadow-sm border-0">
               <div className="d-flex justify-content-between align-items-center mb-2">
                 <span className="text-muted small fw-bold text-uppercase">{card.label}</span>
                 <div className={`pf-stat-icon ${card.color}`}>{card.icon}</div>
               </div>
-              <h2 className="fw-bold mb-0">€{card.val.toLocaleString()}</h2>
+              <h2 className="fw-bold mb-0">€{card.val.toLocaleString(undefined, {minimumFractionDigits: 2})}</h2>
             </div>
           </div>
         ))}
       </div>
 
-      {/* 2. CHART AREA */}
+      {/* 2. BUSINESS HEALTH SCORECARD ROW */}
+      <div className="row g-3 mb-4">
+          <div className="col-12">
+              <div className="pf-card border-0 bg-primary bg-opacity-10 shadow-none d-flex flex-wrap gap-4 align-items-center justify-content-between p-3">
+                  <div className="d-flex align-items-center gap-3">
+                      <div className="bg-white p-2 rounded-circle shadow-sm text-primary">
+                          <HeartPulse size={20} />
+                      </div>
+                      <div>
+                          <p className="text-muted small fw-bold text-uppercase mb-0">{language === 'sq' ? 'Shëndeti i Biznesit' : 'Business Health'}</p>
+                          <h6 className="fw-bold mb-0">{language === 'sq' ? 'Pasqyra e Performancës' : 'Performance Insights'}</h6>
+                      </div>
+                  </div>
+                  
+                  <div className="d-flex flex-wrap gap-4 align-items-center">
+                      <div className="text-center">
+                          <p className="text-muted extra-small fw-bold mb-1">{t.profitMargin || 'PROFIT MARGIN'}</p>
+                          <span className={`badge ${profitMargin > 20 ? 'bg-success' : 'bg-warning'} px-3 py-2 shadow-sm`}>
+                             <PieChart size={12} className="me-1"/> {profitMargin}%
+                          </span>
+                      </div>
+                      <div className="text-center">
+                          <p className="text-muted extra-small fw-bold mb-1">{t.taxReserve || 'TAX RESERVE'} (20%)</p>
+                          <span className="text-dark fw-bold">€{taxReserve.toLocaleString()}</span>
+                      </div>
+
+                      {/* VAT THRESHOLD TRACKER */}
+                      <div className="text-center border-start ps-4">
+                          <p className="text-muted extra-small fw-bold mb-1">{language === 'sq' ? 'LIMITI VJETOR TVSH' : 'YEARLY VAT LIMIT'} (€30k)</p>
+                          <div className="d-flex align-items-center gap-2">
+                             <div className="progress flex-grow-1" style={{ width: '80px', height: '6px' }}>
+                                <div 
+                                    className={`progress-bar ${vatLimitProgress > 80 ? 'bg-danger' : 'bg-primary'}`} 
+                                    style={{ width: `${Math.min(vatLimitProgress, 100)}%` }}
+                                ></div>
+                             </div>
+                             <span className="extra-small fw-bold text-dark">{Math.round(vatLimitProgress)}%</span>
+                          </div>
+                      </div>
+
+                      <button 
+                        className={`btn btn-sm shadow-sm d-flex align-items-center gap-2 ${showTaxTips ? 'btn-warning' : 'btn-light border'}`}
+                        onClick={() => setShowTaxTips(!showTaxTips)}
+                      >
+                         {showTaxTips ? <X size={14}/> : <Sparkles size={14} className="text-warning" />}
+                         <span className="fw-bold">{language === 'sq' ? 'Këshilla' : 'Get Tips'}</span>
+                      </button>
+                  </div>
+              </div>
+          </div>
+      </div>
+
+      {/* SMART TAX SAVER SECTION (SHOWN ONLY ON REQUEST) */}
+      <AnimatePresence>
+        {showTaxTips && taxHealthAlerts.length > 0 && (
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mb-4 overflow-hidden">
+            <div className="pf-card border-0 bg-white shadow-sm p-0 overflow-hidden" style={{ borderLeft: '4px solid #f59e0b' }}>
+               <div className="bg-warning bg-opacity-10 px-4 py-2 border-bottom border-warning border-opacity-25 d-flex align-items-center justify-content-between">
+                  <div className="d-flex align-items-center gap-2">
+                    <Lightbulb size={16} className="text-warning" />
+                    <span className="small fw-bold text-warning-emphasis">SMART TAX SAVER</span>
+                  </div>
+                  <span className="badge bg-warning text-dark extra-small">{taxHealthAlerts.length} SUGGESTIONS</span>
+               </div>
+               <div className="p-3">
+                  {taxHealthAlerts.map((alert, idx) => (
+                    <div key={idx} className="d-flex align-items-center gap-3 mb-2 border-bottom border-light pb-2 last-child-border-0">
+                       <div className={`d-flex align-items-center justify-content-center rounded-circle shadow-sm 
+                          ${alert.type === 'saving' ? 'bg-success text-white' : 
+                            alert.type === 'pension' ? 'bg-primary text-white' : 'bg-warning text-dark'}`} 
+                          style={{ width: '28px', height: '28px', minWidth: '28px' }}>
+                          {alert.icon}
+                       </div>
+                       <p className="small mb-0 text-muted fw-bold">{alert.text}</p>
+                    </div>
+                  ))}
+
+                  {/* ATK COMPLIANCE WARNING */}
+                  {yearToDateIncome > 25000 && (
+                    <div className="mt-3 p-3 bg-danger bg-opacity-10 rounded border border-danger border-opacity-25 d-flex align-items-center gap-3">
+                       <Activity size={20} className="text-danger" />
+                       <div>
+                          <p className="extra-small fw-bold text-danger mb-0 uppercase">Compliance Critical</p>
+                          <p className="small mb-0 text-dark">
+                             {language === 'sq' 
+                               ? `Jeni afër limitit prej €30,000 të qarkullimit. Përgatituni për regjistrimin e TVSH-së.`
+                               : `You are approaching the €30,000 turnover limit. Prepare for VAT registration requirements.`}
+                          </p>
+                       </div>
+                    </div>
+                  )}
+               </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 3. CHART AREA */}
       {entries.length > 0 && (
-        <div className="pf-card no-print">
-          <h5 className="fw-bold mb-4">Financial Flow</h5>
+        <div className="pf-card shadow-sm border-0 no-print mb-4">
+          <h5 className="fw-bold mb-4">{t.chartTitle || "Financial Flow"}</h5>
           <div style={{ height: 300, width: '100%' }}>
             <ResponsiveContainer>
               <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-color)" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: 'var(--text-muted)', fontSize: 12}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fill: 'var(--text-muted)', fontSize: 12}} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
+                <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
                 <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 8px 16px rgba(0,0,0,0.1)' }} />
                 <Bar dataKey="Income" fill="#10b981" radius={[4, 4, 0, 0]} barSize={35} />
                 <Bar dataKey="Expense" fill="#ef4444" radius={[4, 4, 0, 0]} barSize={35} />
@@ -309,95 +498,311 @@ const PersonalFinance = ({ darkMode }) => {
         </div>
       )}
 
-      {/* 3. PREMIUM ACTION BAR */}
-      <div className="pf-card no-print">
-        <h6 className="text-muted small fw-bold text-uppercase mb-3 tracking-wider">Quick Transaction</h6>
-        <div className="pf-action-bar">
-          <div className="pf-input-wrapper">
-            <TrendingUp size={16} className="pf-input-icon" />
-            <select className="pf-field cursor-pointer" value={form.type} onChange={e => handleChange("type", e.target.value)}>
-              <option value="Income">Income</option>
-              <option value="Expense">Expense</option>
-            </select>
-          </div>
-          <div className="pf-input-wrapper">
-            <DollarSign size={16} className="pf-input-icon" />
-            <input type="number" className="pf-field" placeholder="0.00" value={form.actual === 0 ? "" : form.actual} 
-              onFocus={() => form.actual === 0 && handleChange("actual", "")}
-              onChange={e => handleChange("actual", e.target.value)} />
-          </div>
-          <div className="pf-input-wrapper">
-            <Calendar size={16} className="pf-input-icon" />
-            <select className="pf-field border-0 pe-2" value={form.month} onChange={e => handleChange("month", e.target.value)} style={{ width: 'auto' }}>
-              {monthNames[language].map(m => <option key={m}>{m}</option>)}
-            </select>
-            <div className="vr mx-1" style={{ height: '15px' }}></div>
-            <input type="number" className="pf-field ps-2" style={{ width: '65px' }} value={form.year} onChange={e => handleChange("year", parseInt(e.target.value))} />
-          </div>
-          <div className="pf-input-wrapper">
-            <Tag size={16} className="pf-input-icon" />
-            <input className="pf-field" placeholder="Category" value={form.category} onChange={e => handleChange("category", e.target.value)} />
-          </div>
-          <div className="pf-input-wrapper">
-            <FileText size={16} className="pf-input-icon" />
-            <input className="pf-field" placeholder="Description" value={form.description} onChange={e => handleChange("description", e.target.value)} />
-          </div>
-          <button className="pf-add-btn" onClick={addEntry}><Plus size={24}/></button>
+      {/* 4. NEW ENTRY FORM GRID */}
+      <div className={`pf-card shadow-sm border-0 no-print mb-4 p-4 ${isCurrentMonthLocked ? 'locked-form' : ''} ${editingId ? 'border-primary border-opacity-50' : ''}`}>
+        <div className="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
+             <div className="d-flex flex-column gap-1">
+                <h6 className="fw-bold text-uppercase mb-0 tracking-wider d-flex align-items-center gap-2" style={{fontSize: '0.85rem', color: editingId ? 'var(--primary)' : 'inherit'}}>
+                    {editingId ? "Update Entry" : (t.newEntry || "New Entry")}
+                    {isCurrentMonthLocked && <Lock size={14} className="text-danger" />}
+                </h6>
+                {form.type === "Expense" && (
+                    <div className="form-check form-switch d-flex align-items-center gap-2 p-0 m-0">
+                        <input className="form-check-input cursor-pointer ms-0" type="checkbox" 
+                            disabled={isCurrentMonthLocked}
+                            id="taxSwitch" checked={form.hasWithholding} 
+                            onChange={(e) => handleChange("hasWithholding", e.target.checked)} 
+                            style={{width: '32px', height: '16px'}}/>
+                        <label className="form-check-label extra-small fw-bold text-muted cursor-pointer" htmlFor="taxSwitch" style={{fontSize: '0.75rem'}}>
+                            {t.applyTax || "Withholding Tax?"}
+                        </label>
+                    </div>
+                )}
+             </div>
+             {editingId ? (
+                <button className="btn btn-sm btn-light text-danger fw-bold border" onClick={cancelEdit}>
+                    <X size={14} className="me-1"/> {language === 'sq' ? 'Anulo' : 'Cancel Edit'}
+                </button>
+             ) : isCurrentMonthLocked ? (
+                <span className="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 py-1 px-3">{language === 'sq' ? 'PERIUDHË E MBYLLUR' : 'PERIOD CLOSED'}</span>
+             ) : <AlertCircle size={16} className="text-muted" />}
+        </div>
+
+        <div className="row g-3">
+            <div className="col-6 col-md-2">
+                <label className="small text-muted fw-bold mb-1">{t.type}</label>
+                <div className="input-group shadow-sm">
+                    <span className="input-group-text bg-light"><TrendingUp size={16}/></span>
+                    <select disabled={isCurrentMonthLocked} className="form-select fw-bold text-dark" 
+                        value={form.type} onChange={e => handleChange("type", e.target.value)}>
+                        <option value="Income">{t.income}</option>
+                        <option value="Expense">{t.expense}</option>
+                    </select>
+                </div>
+            </div>
+
+            <div className="col-6 col-md-2">
+                <label className="small text-muted fw-bold mb-1">{t.amount}</label>
+                <div className="input-group shadow-sm">
+                    <span className="input-group-text bg-light"><DollarSign size={16}/></span>
+                    <input disabled={isCurrentMonthLocked} type="number" className="form-control fw-bold" placeholder="0.00" 
+                        value={form.actual === 0 ? "" : form.actual} 
+                        onFocus={() => form.actual === 0 && handleChange("actual", "")}
+                        onChange={e => handleChange("actual", e.target.value)} />
+                </div>
+            </div>
+
+            <div className="col-6 col-md-2">
+                <label className="small text-muted fw-bold mb-1">Fiscal #</label>
+                <div className="input-group shadow-sm">
+                    <span className="input-group-text bg-light"><ShieldCheck size={16}/></span>
+                    <input 
+                        disabled={isCurrentMonthLocked} 
+                        type="text" 
+                        className="form-control" 
+                        placeholder="Supplier #" 
+                        value={form.fiscalNumber} 
+                        onChange={e => handleChange("fiscalNumber", e.target.value)} 
+                    />
+                </div>
+            </div>
+
+            <div className="col-12 col-md-2">
+                <label className="small text-muted fw-bold mb-1">{t.date}</label>
+                <div className="input-group shadow-sm">
+                    <select className="form-select" value={form.month} onChange={e => handleChange("month", e.target.value)}>
+                        {monthNames[language].map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <input type="number" className="form-control" style={{maxWidth: '90px'}} 
+                        value={form.year} onChange={e => handleChange("year", parseInt(e.target.value))} />
+                </div>
+            </div>
+
+            <div className="col-6 col-md-2">
+                <label className="small text-muted fw-bold mb-1">{t.category}</label>
+                <div className="input-group shadow-sm">
+                    <span className="input-group-text bg-light"><Tag size={16}/></span>
+                    <input disabled={isCurrentMonthLocked} type="text" className="form-control" placeholder="..." 
+                        value={form.category} onChange={e => handleChange("category", e.target.value)} />
+                </div>
+            </div>
+
+            <div className="col-6 col-md-2">
+                <label className="small text-muted fw-bold mb-1">{t.description}</label>
+                <div className="input-group shadow-sm">
+                    <span className="input-group-text bg-light"><FileText size={16}/></span>
+                    <input disabled={isCurrentMonthLocked} type="text" className="form-control" placeholder="..." 
+                        value={form.description} onChange={e => handleChange("description", e.target.value)} />
+                </div>
+            </div>
+
+            <AnimatePresence>
+            {form.hasWithholding && form.type === "Expense" && (
+                <motion.div initial={{opacity: 0, height: 0}} animate={{opacity: 1, height: 'auto'}} exit={{opacity: 0, height: 0}} className="col-12 overflow-hidden">
+                    <div className="p-3 bg-warning bg-opacity-10 rounded border border-warning border-opacity-25 mt-2 shadow-sm d-flex align-items-center gap-4">
+                        <div>
+                            <label className="small fw-bold text-warning text-uppercase mb-1">{t.taxType || "Tax Type"}</label>
+                            <div className="input-group">
+                                <span className="input-group-text bg-warning bg-opacity-10 border-warning text-warning"><Percent size={14}/></span>
+                                <select disabled={isCurrentMonthLocked} className="form-select border-warning text-dark fw-bold" value={form.taxType} onChange={e => handleChange("taxType", e.target.value)}>
+                                    <option value="Rent">{t.rent9 || "Rent (9%)"}</option>
+                                    <option value="Service">{t.service10 || "Service (10%)"}</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="small text-muted pt-3 fst-italic">{t.taxInfo || "Entering Net Amount. System records Gross Expense."}</div>
+                    </div>
+                </motion.div>
+            )}
+            </AnimatePresence>
+
+            <div className="col-12 mt-3">
+                <button 
+                  disabled={isCurrentMonthLocked}
+                  className={`btn ${editingId ? 'btn-success' : isCurrentMonthLocked ? 'btn-secondary' : 'btn-primary'} w-100 py-2 fw-bold shadow-sm d-flex justify-content-center align-items-center gap-2`} 
+                  onClick={addEntry}>
+                    {editingId ? <Check size={20} strokeWidth={3}/> : <Plus size={20} strokeWidth={3} />}
+                    {editingId ? (language === 'sq' ? 'Përditëso' : "Update Transaction") : t.addEntry}
+                </button>
+            </div>
         </div>
       </div>
 
-      {/* 4. TRANSACTION TABLE */}
-      <div className="pf-card p-0 overflow-hidden">
+      {/* 5. DATA TABLE (FILTERED BY SELECTED MONTH) */}
+      <div className="pf-card shadow-sm border-0 p-0 overflow-hidden mb-4">
         <div className="table-responsive">
-          <table className="pf-table">
-            <thead>
+          <table className="pf-table mb-0">
+            <thead className="bg-light">
               <tr>
-                <th onClick={() => toggleSort("month")}>{t.month}</th>
-                <th onClick={() => toggleSort("category")}>{t.category}</th>
-                <th className="d-none d-md-table-cell">{t.description}</th>
-                <th onClick={() => toggleSort("actual")} className="text-end">{t.amount}</th>
-                <th className="text-end no-print">Actions</th>
+                <th className="ps-4" style={{width: '18%'}}>{t.month}</th>
+                <th style={{width: '15%'}}>{t.category}</th>
+                <th className="d-none d-md-table-cell" style={{width: '37%'}}>{t.description}</th>
+                <th className="text-end pe-4" style={{width: '18%'}}>{t.amount}</th>
+                <th className="text-end pe-4 no-print" style={{width: '12%'}}>{language === 'sq' ? 'Veprimet' : "Actions"}</th>
               </tr>
             </thead>
             <tbody>
               <AnimatePresence>
-                {paginated.map((e, i) => (
-                  <motion.tr key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} layout>
-                    <td data-label={t.month} className="small text-muted fw-bold">{e.month} {e.year}</td>
-                    <td data-label={t.category}><span className={`pf-badge ${e.type === 'Income' ? 'pf-income-bg' : 'pf-expense-bg'}`}>{e.category}</span></td>
-                    <td data-label={t.description} className="text-muted small d-none d-md-table-cell">{e.description}</td>
-                    <td data-label={t.amount} className={`fw-bold text-end ${e.type === 'Income' ? 'text-success' : 'text-danger'}`}>
-                      {e.type === 'Income' ? '+' : '-'}€{Number(e.actual).toLocaleString()}
-                    </td>
-                    <td data-label="Actions" className="text-end no-print">
-                      <button className="btn btn-link text-danger p-1" onClick={() => setEntries(prev => prev.filter(item => item !== e))}><Trash2 size={16}/></button>
-                    </td>
-                  </motion.tr>
-                ))}
+                {paginated.map((e, i) => {
+                  const isLocked = lockedMonths.includes(`${e.month} ${e.year}`);
+                  return (
+                    <motion.tr key={e.id || i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} layout>
+                      <td className="ps-4 small text-muted fw-bold">{e.month} {e.year}</td>
+                      <td><span className={`pf-badge ${e.type === 'Income' ? 'pf-income-bg' : 'pf-expense-bg'}`}>{e.category}</span></td>
+                      <td className="text-muted small d-none d-md-table-cell">
+                          {e.description}
+                          {e.taxDetails && (
+                              <div className="mt-1">
+                                  <span className="badge bg-warning text-dark border-warning bg-opacity-25 py-1">
+                                      {e.taxDetails.type} {t.taxType || "Tax"}: €{e.taxDetails.taxAmount.toFixed(2)}
+                                  </span>
+                              </div>
+                          )}
+                          {e.fiscalNumber && <div className="extra-small text-muted mt-1 opacity-75">SN: {e.fiscalNumber}</div>}
+                      </td>
+                      <td className="text-end pe-4">
+                          <div className="amount-column">
+                              <span className={`fw-bold ${e.type === 'Income' ? 'text-success' : 'text-danger'}`}>
+                                  {e.type === 'Income' ? '+' : '-'}€{Number(e.actual).toLocaleString(undefined, {minimumFractionDigits: 2})}
+                              </span>
+                              {e.taxDetails && (
+                                  <div className="text-muted fw-normal" style={{fontSize: '0.75rem'}}>
+                                      {t.netAmount || "Net Amount"}: €{e.taxDetails.netAmount.toFixed(2)}
+                                  </div>
+                              )}
+                          </div>
+                      </td>
+                      <td className="text-end pe-4 no-print">
+                          <div className="actions-column gap-2">
+                              {isLocked ? (
+                                <Lock size={18} className="text-muted opacity-50" />
+                              ) : (
+                                <>
+                                  <button className="btn btn-link text-primary p-1" onClick={() => startEdit(e)}>
+                                      <Edit3 size={18}/>
+                                  </button>
+                                  <button className="btn btn-link text-danger p-1" onClick={() => setEntries(prev => prev.filter(item => item.id !== e.id))}>
+                                      <Trash2 size={18}/>
+                                  </button>
+                                </>
+                              )}
+                          </div>
+                      </td>
+                    </motion.tr>
+                  );
+                })}
               </AnimatePresence>
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* 5. TOOLBAR */}
-      <div className="pf-card no-print">
+      {/* --- EDIT POP-UP MODAL --- */}
+      <AnimatePresence>
+        {showEditModal && editingEntry && (
+            <div className="pf-modal-overlay">
+                <motion.div initial={{scale: 0.9, opacity: 0}} animate={{scale: 1, opacity: 1}} exit={{scale: 0.9, opacity: 0}} className="pf-modal-content">
+                    <div className="pf-modal-header d-flex justify-content-between align-items-center mb-4 border-bottom pb-2">
+                        <h5 className="fw-bold mb-0 text-primary">{t.newEntry} (Edit)</h5>
+                        <button className="btn-close" onClick={() => setShowEditModal(false)}></button>
+                    </div>
+                    <div className="row g-3">
+                        <div className="col-md-6">
+                            <label className="small fw-bold text-muted mb-1">{t.type}</label>
+                            <select className="form-select shadow-sm" value={editingEntry.type} onChange={e => setEditingEntry({...editingEntry, type: e.target.value})}>
+                                <option value="Income">{t.income}</option>
+                                <option value="Expense">{t.expense}</option>
+                            </select>
+                        </div>
+                        <div className="col-md-6">
+                            <label className="small fw-bold text-muted mb-1">{t.amount}</label>
+                            <div className="input-group shadow-sm">
+                                <span className="input-group-text bg-light"><DollarSign size={14}/></span>
+                                <input type="number" className="form-control fw-bold" value={editingEntry.actual} onChange={e => setEditingEntry({...editingEntry, actual: e.target.value})} />
+                            </div>
+                        </div>
+                        <div className="col-md-6">
+                            <label className="small fw-bold text-muted mb-1">Fiscal Number</label>
+                            <input type="text" className="form-control shadow-sm" value={editingEntry.fiscalNumber} onChange={e => setEditingEntry({...editingEntry, fiscalNumber: e.target.value})} />
+                        </div>
+                        <div className="col-md-6">
+                            <label className="small fw-bold text-muted mb-1">{t.category}</label>
+                            <input type="text" className="form-control shadow-sm" value={editingEntry.category} onChange={e => setEditingEntry({...editingEntry, category: e.target.value})} />
+                        </div>
+                        <div className="col-md-6">
+                            <label className="small fw-bold text-muted mb-1">{t.description}</label>
+                            <input type="text" className="form-control shadow-sm" value={editingEntry.description} onChange={e => setEditingEntry({...editingEntry, description: e.target.value})} />
+                        </div>
+                        
+                        {editingEntry.type === "Expense" && (
+                            <div className="col-12 mt-2">
+                                <div className="form-check form-switch bg-light p-2 rounded ps-5 shadow-sm">
+                                    <input className="form-check-input ms-0" type="checkbox" checked={editingEntry.hasWithholding} 
+                                        onChange={e => setEditingEntry({...editingEntry, hasWithholding: e.target.checked})} />
+                                    <label className="form-check-label fw-bold small ms-2">{t.applyTax}</label>
+                                </div>
+                                {editingEntry.hasWithholding && (
+                                    <select className="form-select mt-2 border-warning shadow-sm" value={editingEntry.taxType} onChange={e => setEditingEntry({...editingEntry, taxType: e.target.value})}>
+                                        <option value="Rent">{t.rent9}</option>
+                                        <option value="Service">{t.service10}</option>
+                                    </select>
+                                )}
+                            </div>
+                        )}
+                        <div className="col-12 mt-4 pt-3 border-top d-flex gap-2">
+                            <button className="btn btn-primary flex-grow-1 py-2 fw-bold shadow-sm" onClick={handleUpdateEntry}>
+                                <Check size={18} className="me-1"/> {t.save || 'Save'}
+                            </button>
+                            <button className="btn btn-light flex-grow-1 border py-2 fw-bold shadow-sm" onClick={() => setShowEditModal(false)}>
+                                {t.cancel || "Cancel"}
+                            </button>
+                        </div>
+                    </div>
+                </motion.div>
+            </div>
+        )}
+      </AnimatePresence>
+
+      {/* 6. TOOLBAR ACTIONS */}
+      <div className="pf-card shadow-sm border-0 no-print">
         <div className="d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
           <div className="d-flex gap-2">
-            <button className="btn btn-sm btn-outline-secondary px-3" disabled={page === 1} onClick={() => setPage(page-1)}>Prev</button>
-            <button className="btn btn-sm btn-outline-secondary px-3" onClick={() => setPage(page+1)}>Next</button>
+            <button className="btn btn-sm btn-outline-secondary px-3" disabled={page === 1} onClick={() => setPage(page-1)}>{t.prev || "Prev"}</button>
+            <button className="btn btn-sm btn-outline-secondary px-3" onClick={() => setPage(page+1)}>{t.next || "Next"}</button>
           </div>
-          <div className="d-flex gap-2 flex-wrap justify-content-center">
+
+          <div className="d-flex gap-2 flex-wrap justify-content-center align-items-center">
+            <button 
+                className={`btn btn-sm px-3 shadow-sm d-flex align-items-center gap-2 ${isCurrentMonthLocked ? 'btn-danger' : 'btn-outline-primary'}`}
+                onClick={toggleMonthLock}
+            >
+                {isCurrentMonthLocked ? <><Lock size={14}/> {language === 'sq' ? 'Zhblloko' : 'Unlock'} {form.month}</> : <><Unlock size={14}/> {language === 'sq' ? 'Blloko' : 'Lock'} {form.month}</>}
+            </button>
+
+            <div className="vr mx-2 d-none d-md-block"></div>
+
             <input type="file" ref={excelInputRef} className="d-none" onChange={handleFileUpload} multiple />
             <input type="file" ref={imageInputRef} className="d-none" onChange={handleBillImageUpload} />
-            <button className="btn btn-light border btn-sm" onClick={() => excelInputRef.current.click()}><FileSpreadsheet size={14}/> Import</button>
-            <button className="btn btn-light border btn-sm" onClick={() => imageInputRef.current.click()}><Camera size={14}/> Scan</button>
-            <button className="btn btn-primary btn-sm px-3" onClick={handleDownloadFinancePDF}><FileText size={14}/> PDF</button>
-            <button className="btn btn-success text-white btn-sm px-3" onClick={async () => {
+            
+            <button 
+                className="btn btn-dark btn-sm px-3 shadow-sm d-flex align-items-center gap-2"
+                onClick={() => exportToATK({ 
+                    entries: filteredEntries, 
+                    month: form.month, 
+                    year: form.year 
+                })}
+            >
+                <ShieldCheck size={14}/> ATK Export (EDI)
+            </button>
+
+            <button className="btn btn-light border btn-sm shadow-sm" onClick={() => excelInputRef.current.click()}><FileSpreadsheet size={14} className="me-1"/> {t.importExcel}</button>
+            <button className="btn btn-light border btn-sm shadow-sm" onClick={() => imageInputRef.current.click()}><Camera size={14} className="me-1"/> {t.scanBill}</button>
+            <button className="btn btn-primary btn-sm px-3 shadow-sm" onClick={handleDownloadFinancePDF}><FileText size={14} className="me-1"/> PDF</button>
+            <button className="btn btn-success text-white btn-sm px-3 shadow-sm" onClick={async () => {
               const { value: fileName } = await Swal.fire({ title: t.enterFileName, input: "text" });
-              if (fileName) exportToExcel({ entries, totals: { income: totalIncome, expense: totalExpense, balance }, title: t.title, fileName });
-            }}><FileSpreadsheet size={14}/> Excel</button>
-            <button className="btn btn-danger btn-sm" onClick={clearAllEntries}><Trash2 size={14}/></button>
+              if (fileName) exportToExcel({ entries: filteredEntries, totals: { income: totalIncome, expense: totalExpense, balance }, title: t.appTitle, fileName });
+            }}><FileSpreadsheet size={14} className="me-1"/> Excel</button>
+            <button disabled={isCurrentMonthLocked} className="btn btn-danger btn-sm shadow-sm" onClick={() => setEntries([])}><Trash2 size={14}/></button>
           </div>
         </div>
       </div>
