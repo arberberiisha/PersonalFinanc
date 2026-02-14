@@ -713,7 +713,7 @@ const PersonalFinance = ({ darkMode }) => {
                     year: form.year 
                 })}
             >
-                <ShieldCheck size={14}/> ATK Export (EDI)
+                <ShieldCheck size={14}/> ATK Export
             </button>
 
             <button className="btn btn-light border btn-sm shadow-sm" onClick={() => excelInputRef.current.click()}><FileSpreadsheet size={14} className="me-1"/> {t.importExcel}</button>
