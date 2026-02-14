@@ -1,38 +1,48 @@
-# 💰 Personal Finance & Billing Suite
+💰 Digital Accountant & Billing Suite
+A professional, modern financial ecosystem designed for entrepreneurs and businesses in Kosovo. Manage cash flow with proactive tax intelligence, track state compliance, and generate industry-standard documents with ease.
 
-A professional, modern React application designed for seamless personal finance tracking and high-quality document generation. Manage your cash flow, analyze spending with AI, and generate industry-standard invoices in multiple languages.
+🚀 Key Features
+🏦 Proactive Finance Tracker
+✅ Dynamic Month Filtering: Dashboard and data table automatically synchronize with the selected period to ensure precision and prevent data entry overlap.
 
-## 🚀 Features
+✅ VAT Threshold Tracker: Real-time yearly progress bar monitors the €30,000 turnover limit. Includes "Compliance Critical" visual alerts to prepare for mandatory VAT registration.
 
-### 🏦 Personal Finance Tracker
-- ✅ **Smart Entry System**: Add income or expense entries with categories and months using a streamlined action bar.
-- ✅ **Real-time Analytics**: Auto-calculates total income, expenses, and balance with live-updating visual summaries.
-- ✅ **Data Portability**: 
-  - Export/Import Excel files using `ExcelJS` with automatic data merging.
-  - Export print-ready financial PDF reports.
+✅ Smart Tax Saver: On-demand advice system (Get Tips button) that proactively scans for Sponsorship deductions (10%), Voluntary Pensions (15%), and missing Operating Costs.
 
-### 📄 Professional Bill Generator
-- ✅ **Bilingual Invoicing**: Fully localized PDF generation in English 🇬🇧 and Albanian 🇦🇱, including translated month names.
-- ✅ **Precision PDF Engine**: Custom-built `jsPDF` integration featuring:
-  - **Branding**: Upload and display your custom business logo.
-  - **Senior Design**: Decorative headers, indigo-themed table lines, and professional "Total Due" styling.
-  - **Smart Units**: Automatic superscript handling (e.g., converts "m2" to "m²") and empty-by-default unit fields.
-  - **Full Metadata**: Track invoice numbers, dates, payment methods, and custom notes.
+✅ Fiscal ID Integration: Native support for NUI (Numri Fiskal) for supplier tracking and audit-ready data persistence.
 
-### 🤖 AI & Advanced Utilities
-- ✅ **AI Bill Scanner**: Extract totals and dates from physical receipts via image upload.
-- ✅ **Responsive UX**: Mobile-first architecture that transforms tables into scannable "Info Cards" on smaller screens.
-- ✅ **Persistence & UI**:
-  - 🌓 Toggle dark/light mode with a deep slate dark theme.
-  - 🧹 Clear all entries with a confirmation prompt via `SweetAlert2`.
-  - ✨ Smooth row animations powered by `Framer Motion`.
+⚖️ Tax Accountant Module
+✅ Batch Yearly Analysis: Upload 12 months of Excel data simultaneously for a complete annual tax declaration.
 
-## 🧰 Tech Stack
+✅ Source Verification: Professional sidebar displaying all uploaded files and their metadata for transparency.
 
-- **Frontend**: React + Bootstrap 5
-- **Animations**: `Framer Motion`
-- **Icons**: `Lucide-React`
-- **PDF Export**: `jsPDF` & `jspdf-autotable` (for Invoices) and `html2pdf.js` (for Reports)
-- **Excel Export/Import**: `ExcelJS` & `file-saver`
-- **Confirmation Dialogs**: `sweetalert2`
-- **Image-to-Text Parsing**: (Optional backend API for bill parsing)
+✅ Period Coverage Visualizer: A JAN–DEC visual checklist that identifies data gaps in your fiscal year.
+
+✅ Official Assessment UI: Generates a state-mirroring liability summary including Profit Tax (10%), VAT Balance (18%), and Pension (5%).
+
+📄 Professional Billing & Exports
+✅ ATK Export (EDI): One-click generation of the official Kosovo Purchase/Sales books in a two-tab Excel structure.
+
+✅ Bilingual Precision: Fully localized interface and PDF generation in English 🇬🇧 and Albanian 🇦🇱.
+
+✅ Branded Reports: Customized PDF and Excel exports featuring your specific company name and logo.
+
+🤖 AI Utilities & Responsive UX
+✅ AI Bill Scanner: Extract amounts and dates from physical receipts via image upload.
+
+✅ Hybrid Mobile UI: Tables transform into scannable "Info Cards" on mobile devices for ease of use in the field.
+
+✅ Deep Slate Dark Theme: Professional-grade UI optimized for long-duration financial management.
+
+🧰 Tech Stack
+Frontend: React + Bootstrap 5
+
+Animations: Framer Motion (Smooth row transitions and modal entry)
+
+Icons: Lucide-React (Action-oriented financial iconography)
+
+PDF Export: jsPDF & jspdf-autotable
+
+Excel Logic: ExcelJS & file-saver (Batch processing and multi-sheet exports)
+
+Dialogs: SweetAlert2 (Context-aware confirmation prompts)
