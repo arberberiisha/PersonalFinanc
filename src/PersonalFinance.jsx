@@ -9,14 +9,14 @@ import {
   FileSpreadsheet, Trash2, Plus, FileText, Edit3, X, Check, Lock, Unlock,
   TrendingUp, TrendingDown, DollarSign, Camera, Tag, Calendar,
   Percent, AlertCircle, HeartPulse, PieChart, ShieldCheck, Sparkles,
-  Receipt, Lightbulb, Activity
+  Receipt, Lightbulb, Activity, ChevronLeft, ChevronRight, Upload, Download
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 import "./FinanceModule.css";
 
-// Assuming these utils exist in your project structure
+// Assuming these utils exist
 import { exportToExcel } from "./utils/exportToExcel";
 import { uploadBillImage } from "./utils/billUploader";
 import { showError } from "./utils/showError";
@@ -102,40 +102,14 @@ const PersonalFinance = ({ darkMode }) => {
         Swal.fire("Locked", t.lockedMessage || (language === 'sq' ? 'Ky muaj është i mbyllur.' : 'This month is closed.'), "warning");
         return;
     }
-    handleOpenEdit(entry);
-  };
-
-  const handleOpenEdit = (entry) => {
+    setEditingId(entry.id);
     const netVal = entry.taxDetails ? entry.taxDetails.netAmount : entry.actual;
-    setEditingEntry({
+    setForm({
         ...entry,
         actual: netVal,
         hasWithholding: !!entry.taxDetails,
-        taxType: entry.taxDetails ? entry.taxDetails.type : "Rent",
-        fiscalNumber: entry.fiscalNumber || "" 
+        taxType: entry.taxDetails ? entry.taxDetails.type : "Rent"
     });
-    setShowEditModal(true);
-  };
-
-  const handleUpdateEntry = () => {
-    let finalAmount = Number(editingEntry.actual);
-    let taxDetails = null;
-
-    if (editingEntry.type === "Expense" && editingEntry.hasWithholding) {
-        const { gross, tax, net } = calculateWithholding(editingEntry.actual, editingEntry.taxType);
-        finalAmount = gross;
-        taxDetails = { type: editingEntry.taxType, netAmount: net, taxAmount: tax };
-    }
-
-    setEntries(prev => prev.map(e => e.id === editingEntry.id ? { 
-        ...editingEntry, 
-        actual: finalAmount, 
-        taxDetails: taxDetails 
-    } : e));
-    
-    setShowEditModal(false);
-    setEditingEntry(null);
-    Swal.fire({ icon: 'success', title: t.updated || 'Updated', timer: 1000, showConfirmButton: false });
   };
 
   const cancelEdit = () => {
@@ -188,12 +162,10 @@ const PersonalFinance = ({ darkMode }) => {
     localStorage.setItem("lastMonth", form.month);
   };
 
-  // --- FILTERED DATA FOR CURRENT VIEW ---
   const filteredEntries = useMemo(() => {
     return entries.filter(e => e.month === form.month && e.year === form.year);
   }, [entries, form.month, form.year]);
 
-  // --- YEAR-TO-DATE VAT CALCULATION ---
   const yearToDateIncome = useMemo(() => {
     return entries
       .filter(e => e.year === form.year && e.type === "Income")
@@ -201,7 +173,6 @@ const PersonalFinance = ({ darkMode }) => {
   }, [entries, form.year]);
 
   const vatLimitProgress = (yearToDateIncome / 30000) * 100;
-
   const totalIncome = filteredEntries.filter((e) => e.type === "Income").reduce((acc, e) => acc + Number(e.actual), 0);
   const totalExpense = filteredEntries.filter((e) => e.type === "Expense").reduce((acc, e) => acc + Number(e.actual), 0);
   const balance = totalIncome - totalExpense;
@@ -218,7 +189,6 @@ const PersonalFinance = ({ darkMode }) => {
     const alerts = [];
     const monthIncome = totalIncome;
     
-    // 1. Sponsorship Tip
     const sponsorshipTotal = filteredEntries
       .filter(e => e.category?.toLowerCase().includes("sponsor"))
       .reduce((sum, e) => sum + Number(e.actual), 0);
@@ -234,7 +204,6 @@ const PersonalFinance = ({ darkMode }) => {
       });
     }
 
-    // 2. Pension Tip
     const pensionTotal = filteredEntries
       .filter(e => e.category?.toLowerCase().includes("trust") || e.category?.toLowerCase().includes("pension"))
       .reduce((sum, e) => sum + Number(e.actual), 0);
@@ -249,7 +218,6 @@ const PersonalFinance = ({ darkMode }) => {
         });
     }
 
-    // 3. Operating Cost Tip
     const hasFuel = filteredEntries.some(e => e.category?.toLowerCase().includes("naft") || e.category?.toLowerCase().includes("fuel"));
     const hasUtilities = filteredEntries.some(e => e.category?.toLowerCase().includes("rrym") || e.category?.toLowerCase().includes("electric"));
 
@@ -396,7 +364,6 @@ const PersonalFinance = ({ darkMode }) => {
                           <span className="text-dark fw-bold">€{taxReserve.toLocaleString()}</span>
                       </div>
 
-                      {/* VAT THRESHOLD */}
                       <div className="text-center border-start ps-4">
                           <p className="text-muted extra-small fw-bold mb-1">{language === 'sq' ? 'LIMITI VJETOR TVSH' : 'YEARLY VAT LIMIT'} (€30k)</p>
                           <div className="d-flex align-items-center gap-2">
@@ -422,7 +389,6 @@ const PersonalFinance = ({ darkMode }) => {
           </div>
       </div>
 
-      {/* SMART TAX SAVER */}
       <AnimatePresence>
         {showTaxTips && taxHealthAlerts.length > 0 && (
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mb-4 overflow-hidden">
@@ -446,8 +412,6 @@ const PersonalFinance = ({ darkMode }) => {
                        <p className="small mb-0 text-muted fw-bold">{alert.text}</p>
                     </div>
                   ))}
-
-                  {/* ATK WARNING */}
                   {yearToDateIncome > 25000 && (
                     <div className="mt-3 p-3 bg-danger bg-opacity-10 rounded border border-danger border-opacity-25 d-flex align-items-center gap-3">
                        <Activity size={20} className="text-danger" />
@@ -467,7 +431,6 @@ const PersonalFinance = ({ darkMode }) => {
         )}
       </AnimatePresence>
 
-      {/* 3. CHART */}
       {entries.length > 0 && (
         <div className="pf-card shadow-sm border-0 no-print mb-4">
           <h5 className="fw-bold mb-4">{t.chartTitle || "Financial Flow"}</h5>
@@ -486,7 +449,7 @@ const PersonalFinance = ({ darkMode }) => {
         </div>
       )}
 
-      {/* 4. NEW ENTRY FORM (FIXED RESPONSIVE GRID) */}
+      {/* 4. NEW ENTRY FORM */}
       <div className={`pf-card shadow-sm border-0 no-print mb-4 p-4 ${isCurrentMonthLocked ? 'locked-form' : ''} ${editingId ? 'border-primary border-opacity-50' : ''}`}>
         <div className="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
              <div className="d-flex flex-column gap-1">
@@ -517,7 +480,6 @@ const PersonalFinance = ({ darkMode }) => {
         </div>
 
         <div className="row g-3">
-            {/* TYPE & AMOUNT */}
             <div className="col-12 col-md-2">
                 <label className="small text-muted fw-bold mb-1">{t.type}</label>
                 <div className="input-group shadow-sm">
@@ -536,12 +498,10 @@ const PersonalFinance = ({ darkMode }) => {
                     <span className="input-group-text bg-light"><DollarSign size={16}/></span>
                     <input disabled={isCurrentMonthLocked} type="number" className="form-control fw-bold" placeholder="0.00" 
                         value={form.actual === 0 ? "" : form.actual} 
-                        onFocus={() => form.actual === 0 && handleChange("actual", "")}
                         onChange={e => handleChange("actual", e.target.value)} />
                 </div>
             </div>
 
-            {/* DATE & FISCAL */}
             <div className="col-12 col-md-2">
                 <label className="small text-muted fw-bold mb-1">{t.date}</label>
                 <div className="input-group shadow-sm">
@@ -562,7 +522,6 @@ const PersonalFinance = ({ darkMode }) => {
                 </div>
             </div>
 
-            {/* CATEGORY & DESCRIPTION */}
             <div className="col-12 col-md-2">
                 <label className="small text-muted fw-bold mb-1">{t.category}</label>
                 <div className="input-group shadow-sm">
@@ -581,33 +540,8 @@ const PersonalFinance = ({ darkMode }) => {
                 </div>
             </div>
 
-            {/* TAX TYPE (CONDITIONAL) */}
-            <AnimatePresence>
-            {form.hasWithholding && form.type === "Expense" && (
-                <motion.div initial={{opacity: 0, height: 0}} animate={{opacity: 1, height: 'auto'}} exit={{opacity: 0, height: 0}} className="col-12 overflow-hidden">
-                    <div className="p-3 bg-warning bg-opacity-10 rounded border border-warning border-opacity-25 mt-2 shadow-sm d-flex flex-column flex-md-row align-items-md-center gap-3">
-                        <div className="flex-grow-1">
-                            <label className="small fw-bold text-warning text-uppercase mb-1">{t.taxType || "Tax Type"}</label>
-                            <div className="input-group">
-                                <span className="input-group-text bg-warning bg-opacity-10 border-warning text-warning"><Percent size={14}/></span>
-                                <select disabled={isCurrentMonthLocked} className="form-select border-warning text-dark fw-bold" value={form.taxType} onChange={e => handleChange("taxType", e.target.value)}>
-                                    <option value="Rent">{t.rent9 || "Rent (9%)"}</option>
-                                    <option value="Service">{t.service10 || "Service (10%)"}</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div className="small text-muted fst-italic">{t.taxInfo || "Entering Net Amount. System records Gross Expense."}</div>
-                    </div>
-                </motion.div>
-            )}
-            </AnimatePresence>
-
-            {/* ACTION BUTTON */}
             <div className="col-12 mt-3">
-                <button 
-                  disabled={isCurrentMonthLocked}
-                  className={`btn ${editingId ? 'btn-success' : isCurrentMonthLocked ? 'btn-secondary' : 'btn-primary'} w-100 py-2 fw-bold shadow-sm d-flex justify-content-center align-items-center gap-2`} 
-                  onClick={addEntry}>
+                <button disabled={isCurrentMonthLocked} className={`btn ${editingId ? 'btn-success' : isCurrentMonthLocked ? 'btn-secondary' : 'btn-primary'} w-100 py-2 fw-bold shadow-sm d-flex justify-content-center align-items-center gap-2`} onClick={addEntry}>
                     {editingId ? <Check size={20} strokeWidth={3}/> : <Plus size={20} strokeWidth={3} />}
                     {editingId ? (language === 'sq' ? 'Përditëso' : "Update Transaction") : t.addEntry}
                 </button>
@@ -615,7 +549,7 @@ const PersonalFinance = ({ darkMode }) => {
         </div>
       </div>
 
-      {/* 5. DATA TABLE (FILTERED BY SELECTED MONTH) */}
+      {/* 5. DATA TABLE */}
       <div className="pf-card shadow-sm border-0 p-0 overflow-hidden mb-4">
         <div className="table-responsive">
           <table className="pf-table mb-0">
@@ -638,39 +572,19 @@ const PersonalFinance = ({ darkMode }) => {
                       <td><span className={`pf-badge ${e.type === 'Income' ? 'pf-income-bg' : 'pf-expense-bg'}`}>{e.category}</span></td>
                       <td className="text-muted small d-none d-md-table-cell">
                           {e.description}
-                          {e.taxDetails && (
-                              <div className="mt-1">
-                                  <span className="badge bg-warning text-dark border-warning bg-opacity-25 py-1">
-                                      {e.taxDetails.type} {t.taxType || "Tax"}: €{e.taxDetails.taxAmount.toFixed(2)}
-                                  </span>
-                              </div>
-                          )}
-                          {e.fiscalNumber && <div className="extra-small text-muted mt-1 opacity-75">SN: {e.fiscalNumber}</div>}
+                          {e.taxDetails && <div className="mt-1"><span className="badge bg-warning text-dark border-warning bg-opacity-25 py-1">{e.taxDetails.type} {t.taxType || "Tax"}: €{e.taxDetails.taxAmount.toFixed(2)}</span></div>}
                       </td>
                       <td className="text-end pe-4">
-                          <div className="amount-column">
-                              <span className={`fw-bold ${e.type === 'Income' ? 'text-success' : 'text-danger'}`}>
-                                  {e.type === 'Income' ? '+' : '-'}€{Number(e.actual).toLocaleString(undefined, {minimumFractionDigits: 2})}
-                              </span>
-                              {e.taxDetails && (
-                                  <div className="text-muted fw-normal" style={{fontSize: '0.75rem'}}>
-                                      {t.netAmount || "Net Amount"}: €{e.taxDetails.netAmount.toFixed(2)}
-                                  </div>
-                              )}
-                          </div>
+                          <span className={`fw-bold ${e.type === 'Income' ? 'text-success' : 'text-danger'}`}>
+                              {e.type === 'Income' ? '+' : '-'}€{Number(e.actual).toLocaleString(undefined, {minimumFractionDigits: 2})}
+                          </span>
                       </td>
                       <td className="text-end pe-4 no-print">
-                          <div className="actions-column gap-2">
-                              {isLocked ? (
-                                <Lock size={18} className="text-muted opacity-50" />
-                              ) : (
+                          <div className="d-flex justify-content-end gap-2">
+                              {isLocked ? <Lock size={18} className="text-muted opacity-50" /> : (
                                 <>
-                                  <button className="btn btn-link text-primary p-1" onClick={() => startEdit(e)}>
-                                      <Edit3 size={18}/>
-                                  </button>
-                                  <button className="btn btn-link text-danger p-1" onClick={() => setEntries(prev => prev.filter(item => item.id !== e.id))}>
-                                      <Trash2 size={18}/>
-                                  </button>
+                                  <button className="btn btn-link text-primary p-1" onClick={() => startEdit(e)}><Edit3 size={18}/></button>
+                                  <button className="btn btn-link text-danger p-1" onClick={() => setEntries(prev => prev.filter(item => item.id !== e.id))}><Trash2 size={18}/></button>
                                 </>
                               )}
                           </div>
@@ -684,46 +598,67 @@ const PersonalFinance = ({ darkMode }) => {
         </div>
       </div>
 
-      {/* 6. TOOLBAR ACTIONS */}
-      <div className="pf-card shadow-sm border-0 no-print">
-        <div className="d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
-          <div className="d-flex gap-2">
-            <button className="btn btn-sm btn-outline-secondary px-3" disabled={page === 1} onClick={() => setPage(page-1)}>{t.prev || "Prev"}</button>
-            <button className="btn btn-sm btn-outline-secondary px-3" onClick={() => setPage(page+1)}>{t.next || "Next"}</button>
+      {/* 6. TOOLBAR ACTIONS - CLEAN ALIGNMENT */}
+      <div className="pf-card shadow-sm border-0 no-print p-3 bg-white">
+        <div className="d-flex flex-column flex-lg-row justify-content-between align-items-center gap-4">
+          
+          {/* Group 1: Pagination (Left Side) */}
+          <div className="d-flex align-items-center gap-2">
+            <button className="btn btn-outline-secondary btn-sm d-flex align-items-center px-3" disabled={page === 1} onClick={() => setPage(page-1)}>
+                <ChevronLeft size={16} className="me-1"/> {t.prev || "Prev"}
+            </button>
+            <div className="px-3 py-1 bg-light rounded-pill border small fw-bold text-muted">Page {page}</div>
+            <button className="btn btn-outline-secondary btn-sm d-flex align-items-center px-3" onClick={() => setPage(page+1)}>
+                {t.next || "Next"} <ChevronRight size={16} className="ms-1"/>
+            </button>
           </div>
 
-          <div className="d-flex gap-2 flex-wrap justify-content-center align-items-center">
+          {/* Group 2: Actions (Right Side) */}
+          <div className="d-flex flex-wrap gap-2 justify-content-center align-items-center">
+            
+            {/* Lock Action Group */}
             <button 
-                className={`btn btn-sm px-3 shadow-sm d-flex align-items-center gap-2 ${isCurrentMonthLocked ? 'btn-danger' : 'btn-outline-primary'}`}
+                className={`btn btn-sm d-flex align-items-center gap-2 px-3 fw-bold transition-all ${isCurrentMonthLocked ? 'btn-danger shadow-sm' : 'btn-outline-dark'}`}
                 onClick={toggleMonthLock}
             >
-                {isCurrentMonthLocked ? <><Lock size={14}/> {language === 'sq' ? 'Zhblloko' : 'Unlock'} {form.month}</> : <><Unlock size={14}/> {language === 'sq' ? 'Blloko' : 'Lock'} {form.month}</>}
+                {isCurrentMonthLocked ? <><Lock size={14}/> {language === 'sq' ? 'Zhblloko' : 'Unlock'}</> : <><Unlock size={14}/> {language === 'sq' ? 'Blloko' : 'Lock'}</>}
             </button>
 
-            <div className="vr mx-2 d-none d-md-block"></div>
+            <div className="vr d-none d-md-block mx-1 text-muted opacity-25"></div>
 
-            <input type="file" ref={excelInputRef} className="d-none" onChange={handleFileUpload} multiple />
-            <input type="file" ref={imageInputRef} className="d-none" onChange={handleBillImageUpload} />
-            
-            <button 
-                className="btn btn-dark btn-sm px-3 shadow-sm d-flex align-items-center gap-2"
-                onClick={() => exportToATK({ 
-                    entries: filteredEntries, 
-                    month: form.month, 
-                    year: form.year 
-                })}
-            >
-                <ShieldCheck size={14}/> ATK Export
+            {/* Import Group */}
+            <div className="btn-group shadow-sm">
+                <input type="file" ref={excelInputRef} className="d-none" onChange={handleFileUpload} multiple />
+                <input type="file" ref={imageInputRef} className="d-none" onChange={handleBillImageUpload} />
+                <button className="btn btn-light border-secondary-subtle btn-sm text-muted d-flex align-items-center gap-2 px-3" onClick={() => excelInputRef.current.click()}>
+                    <Upload size={14} className="text-primary"/> Excel
+                </button>
+                <button className="btn btn-light border-secondary-subtle btn-sm text-muted d-flex align-items-center gap-2 px-3" onClick={() => imageInputRef.current.click()}>
+                    <Camera size={14} className="text-primary"/> Scan
+                </button>
+            </div>
+
+            {/* Export Group */}
+            <div className="btn-group shadow-sm">
+                <button className="btn btn-white border-secondary-subtle btn-sm text-dark d-flex align-items-center gap-2 px-3" onClick={handleDownloadFinancePDF}>
+                    <FileText size={14} className="text-danger"/> PDF
+                </button>
+                <button className="btn btn-white border-secondary-subtle btn-sm text-dark d-flex align-items-center gap-2 px-3" onClick={async () => {
+                    const { value: fileName } = await Swal.fire({ title: t.enterFileName, input: "text" });
+                    if (fileName) exportToExcel({ entries: filteredEntries, totals: { income: totalIncome, expense: totalExpense, balance }, title: t.appTitle, fileName });
+                }}>
+                    <FileSpreadsheet size={14} className="text-success"/> Excel
+                </button>
+                <button className="btn btn-dark btn-sm d-flex align-items-center gap-2 px-3" onClick={() => exportToATK({ entries: filteredEntries, month: form.month, year: form.year })}>
+                    <ShieldCheck size={14} className="text-info"/> ATK
+                </button>
+            </div>
+
+            {/* Clear All Group */}
+            <button disabled={isCurrentMonthLocked} className="btn btn-outline-danger btn-sm shadow-sm d-flex align-items-center justify-content-center" onClick={() => setEntries([])} style={{ width: '36px', height: '32px' }} title="Clear All">
+                <Trash2 size={16}/>
             </button>
 
-            <button className="btn btn-light border btn-sm shadow-sm" onClick={() => excelInputRef.current.click()}><FileSpreadsheet size={14} className="me-1"/> {t.importExcel}</button>
-            <button className="btn btn-light border btn-sm shadow-sm" onClick={() => imageInputRef.current.click()}><Camera size={14} className="me-1"/> {t.scanBill}</button>
-            <button className="btn btn-primary btn-sm px-3 shadow-sm" onClick={handleDownloadFinancePDF}><FileText size={14} className="me-1"/> PDF</button>
-            <button className="btn btn-success text-white btn-sm px-3 shadow-sm" onClick={async () => {
-              const { value: fileName } = await Swal.fire({ title: t.enterFileName, input: "text" });
-              if (fileName) exportToExcel({ entries: filteredEntries, totals: { income: totalIncome, expense: totalExpense, balance }, title: t.appTitle, fileName });
-            }}><FileSpreadsheet size={14} className="me-1"/> Excel</button>
-            <button disabled={isCurrentMonthLocked} className="btn btn-danger btn-sm shadow-sm" onClick={() => setEntries([])}><Trash2 size={14}/></button>
           </div>
         </div>
       </div>

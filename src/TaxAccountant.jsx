@@ -5,7 +5,7 @@ import { useTranslations } from "./LanguageContext";
 import { 
   UploadCloud, FileSpreadsheet, Download, 
   TrendingUp, TrendingDown, Building2, AlertCircle,
-  FileCheck, Trash2, CalendarCheck, Activity 
+  FileCheck, Trash2, CalendarCheck, Activity, Users
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -28,7 +28,7 @@ const TaxAccountant = () => {
 
   const fileInputRef = useRef();
 
-  // --- BATCH IMPORT LOGIC ---
+  // --- BATCH IMPORT LOGIC (UPDATED FOR PAYROLL INTEGRATION) ---
   const handleBatchImport = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
@@ -44,27 +44,70 @@ const TaxAccountant = () => {
       await workbook.xlsx.load(await file.arrayBuffer());
       const worksheet = workbook.getWorksheet(1);
       
-      fileMetadata.push({ name: file.name, size: (file.size / 1024).toFixed(1) + " KB" });
+      // Determine file type
+      const headerRow = worksheet.getRow(1).values;
+      const isPayrollFile = headerRow.includes('Employee Name') && headerRow.includes('Total Company Cost');
 
-      worksheet.eachRow((row, rowNumber) => {
-        if (rowNumber > 2) {
-            const rowVal = row.values;
-            if(rowVal[3] && rowVal[6]) {
-                aggregatedEntries.push({
-                    type: rowVal[3], 
-                    category: rowVal[4],
-                    amount: Number(rowVal[6]),
-                    month: rowVal[1] 
-                });
-            }
-        }
+      fileMetadata.push({ 
+          name: file.name, 
+          size: (file.size / 1024).toFixed(1) + " KB",
+          type: isPayrollFile ? 'PAYROLL' : 'STANDARD'
       });
+
+      if (isPayrollFile) {
+          // --- PAYROLL FILE LOGIC ---
+          // In the PayrollManager export, we store total sum in the row after data
+          // But safer to just iterate and sum up the 'Total Company Cost' column (index 7 based on export)
+          let totalPayrollCost = 0;
+          let monthStr = "General";
+
+          worksheet.eachRow((row, rowNumber) => {
+             if (rowNumber > 1) {
+                 const vals = row.values;
+                 // Check if it's a data row (has name and cost)
+                 if (vals[1] && vals[7] && vals[1] !== "TOTALS" && vals[1] !== "META") {
+                     totalPayrollCost += Number(vals[7]);
+                 }
+                 // Check if it is the META row we added in PayrollManager
+                 if (vals[1] === "META") {
+                     monthStr = vals[2]; // Month from meta
+                 }
+             }
+          });
+
+          if (totalPayrollCost > 0) {
+              aggregatedEntries.push({
+                  type: "Expense",
+                  category: "Pagat & Kontributet", // Official Category Name
+                  amount: totalPayrollCost,
+                  month: monthStr,
+                  source: "Payroll"
+              });
+          }
+
+      } else {
+          // --- STANDARD LOGIC (Old Logic) ---
+          worksheet.eachRow((row, rowNumber) => {
+            if (rowNumber > 2) {
+                const rowVal = row.values;
+                if(rowVal[3] && rowVal[6]) {
+                    aggregatedEntries.push({
+                        type: rowVal[3], 
+                        category: rowVal[4],
+                        amount: Number(rowVal[6]),
+                        month: rowVal[1],
+                        source: "Bank/Manual"
+                    });
+                }
+            }
+          });
+      }
     }
 
-    setUploadedFiles(fileMetadata);
-    setEntries(aggregatedEntries);
+    setUploadedFiles(prev => [...prev, ...fileMetadata]);
+    setEntries(prev => [...prev, ...aggregatedEntries]);
     Swal.close();
-    Swal.fire("Success", `Imported ${aggregatedEntries.length} transactions.`, "success");
+    Swal.fire("Success", `Imported successfully.`, "success");
     e.target.value = null;
   };
 
@@ -76,7 +119,13 @@ const TaxAccountant = () => {
   const taxableProfit = grossProfit > 0 ? grossProfit : 0;
   
   const estimatedVAT_Owe = totalIncome * TAX_RATES.VAT;
-  const estimatedVAT_Claim = totalExpense * TAX_RATES.VAT;
+  // Note: Payroll expenses (Salaries) do NOT have deductible VAT. 
+  // We filter out Payroll from VAT Claim.
+  const expensesWithVAT = entries.filter(e => 
+      ["Expense", "Shpenzime"].includes(e.type) && e.category !== "Pagat & Kontributet"
+  ).reduce((sum, e) => sum + e.amount, 0);
+
+  const estimatedVAT_Claim = expensesWithVAT * TAX_RATES.VAT;
   const netVAT = estimatedVAT_Owe - estimatedVAT_Claim;
 
   const pensionContribution = (grossProfit * TAX_RATES.PENSION);
@@ -171,16 +220,14 @@ const TaxAccountant = () => {
       }
     });
 
-    // --- FIX: Dynamic Footer Positioning ---
-    const finalY = doc.lastAutoTable.finalY + 15; // Increased margin
+    const finalY = doc.lastAutoTable.finalY + 15;
     
-    // ADJUSTED RECTANGLE: moved left (100) and made wider (95) to fit long labels
     doc.setFillColor(245, 245, 245);
     doc.rect(100, finalY - 8, 95, 18, "F"); 
     
     doc.setFontSize(12); doc.setTextColor(0); doc.setFont("helvetica", "bold");
-    doc.text(t.totalPayable, 105, finalY + 4); // Label aligned left inside box
-    doc.text(`€ ${totalTaxLiability.toFixed(2)}`, 190, finalY + 4, { align: "right" }); // Value aligned right
+    doc.text(t.totalPayable, 105, finalY + 4); 
+    doc.text(`€ ${totalTaxLiability.toFixed(2)}`, 190, finalY + 4, { align: "right" });
 
     doc.save(`${companyName}_Tax_Declaration_${year}.pdf`);
   };
@@ -301,12 +348,12 @@ const TaxAccountant = () => {
                     <ul className="list-group list-group-flush">
                       {uploadedFiles.map((file, idx) => (
                         <li key={idx} className="list-group-item d-flex align-items-center gap-3 py-3">
-                          <div className="p-2 bg-white rounded border">
-                            <FileSpreadsheet size={20} className="text-success" />
+                          <div className={`p-2 bg-white rounded border ${file.type === 'PAYROLL' ? 'border-primary' : ''}`}>
+                            {file.type === 'PAYROLL' ? <Users size={20} className="text-primary"/> : <FileSpreadsheet size={20} className="text-success" />}
                           </div>
                           <div className="overflow-hidden">
                             <p className="mb-0 small fw-bold text-truncate">{file.name}</p>
-                            <p className="mb-0 extra-small text-muted">{file.size}</p>
+                            <p className="mb-0 extra-small text-muted">{file.type} • {file.size}</p>
                           </div>
                         </li>
                       ))}

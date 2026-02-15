@@ -1,26 +1,62 @@
 import React, { useState } from "react";
-import { User, Lock, Mail, ArrowRight, ShieldCheck, Briefcase } from "lucide-react";
+import { User, Lock, Mail, ArrowRight, ShieldCheck, Briefcase, Users, LayoutDashboard } from "lucide-react";
 
 export default function LoginPage({ onLogin }) {
   const [isRegistering, setIsRegistering] = useState(false);
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(""); // This is now 'Username/Role'
   const [password, setPassword] = useState("");
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    // Simulate Logic: Check if email contains "admin"
-    const role = email.toLowerCase().includes("admin") ? "admin" : "customer";
-    const name = email.split("@")[0];
+    
+    // Simple password check for demo
+    if (password !== "1234") {
+        alert("Wrong password! Try 1234");
+        return;
+    }
+
+    const input = email.toLowerCase().trim();
+    let role = "personal";
+    let name = email; // Default name is what you typed
+    let companyName = "Personal Account";
+
+    // --- ROLE LOGIC ---
+    if (input.includes("admin")) {
+        role = "admin";
+        name = "System Administrator";
+        companyName = "FinTrack HQ";
+    } else if (input.includes("manager")) {
+        role = "manager";
+        name = "Hekuran Manager";
+        companyName = "RB Tech LLC";
+    } else if (input.includes("worker")) {
+        role = "worker";
+        name = "Hekuran Worker";
+        companyName = "RB Tech LLC";
+    } else {
+        // Anything else is 'personal'
+        role = "personal";
+        name = email.charAt(0).toUpperCase() + email.slice(1); // Capitalize
+        companyName = `${name}'s Personal Finance`;
+    }
     
     // Pass user data back to App.jsx
-    onLogin({ name, email, role });
+    onLogin({ name, email, role, companyName });
   };
 
   const demoLogin = (type) => {
       if(type === 'admin') {
-          onLogin({ name: "System Admin", email: "admin@rbtech.com", role: "admin" });
+          setEmail("admin");
+          setPassword("1234");
+      } else if (type === 'manager') {
+          setEmail("manager");
+          setPassword("1234");
+      } else if (type === 'worker') {
+          setEmail("worker");
+          setPassword("1234");
       } else {
-          onLogin({ name: "Hekuran Bajrami", email: "Hekuran@business.com", role: "customer" });
+          setEmail("Arber");
+          setPassword("1234");
       }
   };
 
@@ -54,9 +90,9 @@ export default function LoginPage({ onLogin }) {
             <div className="input-group border rounded-3 overflow-hidden shadow-sm">
               <span className="input-group-text bg-white border-0"><Mail size={18} className="text-muted"/></span>
               <input 
-                type="email" 
+                type="text" 
                 className="form-control border-0" 
-                placeholder="Email Address" 
+                placeholder="Username (e.g. manager, worker)" 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required 
@@ -70,7 +106,7 @@ export default function LoginPage({ onLogin }) {
               <input 
                 type="password" 
                 className="form-control border-0" 
-                placeholder="Password" 
+                placeholder="Password (1234)" 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required 
@@ -97,14 +133,28 @@ export default function LoginPage({ onLogin }) {
 
         {/* --- DEMO SECTION (FOR YOUR PRESENTATION) --- */}
         <div className="bg-light p-3 rounded-3 border border-dashed text-center">
-            <p className="extra-small fw-bold text-uppercase text-muted mb-2 tracking-widest">⚡ Quick Demo Access</p>
-            <div className="d-flex gap-2">
-                <button className="btn btn-sm btn-white border shadow-sm w-50 d-flex align-items-center justify-content-center gap-2" onClick={() => demoLogin('customer')}>
-                    <User size={14} className="text-success"/> Customer
-                </button>
-                <button className="btn btn-sm btn-white border shadow-sm w-50 d-flex align-items-center justify-content-center gap-2" onClick={() => demoLogin('admin')}>
-                    <ShieldCheck size={14} className="text-danger"/> Admin
-                </button>
+            <p className="extra-small fw-bold text-uppercase text-muted mb-2 tracking-widest">⚡ Quick Role Access</p>
+            <div className="row g-2">
+                <div className="col-6">
+                    <button className="btn btn-sm btn-white border shadow-sm w-100 d-flex align-items-center justify-content-center gap-2" onClick={() => demoLogin('manager')}>
+                        <LayoutDashboard size={14} className="text-primary"/> Manager
+                    </button>
+                </div>
+                <div className="col-6">
+                    <button className="btn btn-sm btn-white border shadow-sm w-100 d-flex align-items-center justify-content-center gap-2" onClick={() => demoLogin('worker')}>
+                        <Briefcase size={14} className="text-success"/> Worker
+                    </button>
+                </div>
+                <div className="col-6">
+                    <button className="btn btn-sm btn-white border shadow-sm w-100 d-flex align-items-center justify-content-center gap-2" onClick={() => demoLogin('personal')}>
+                        <User size={14} className="text-info"/> Personal
+                    </button>
+                </div>
+                <div className="col-6">
+                    <button className="btn btn-sm btn-white border shadow-sm w-100 d-flex align-items-center justify-content-center gap-2" onClick={() => demoLogin('admin')}>
+                        <ShieldCheck size={14} className="text-danger"/> Admin
+                    </button>
+                </div>
             </div>
         </div>
 

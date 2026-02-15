@@ -1,8 +1,8 @@
 import React from "react";
-import PersonalFinanceTracker from "./PersonalFinanceTracker";
+import FinTech24 from "./FinTech24";
 
 function App() {
-  return <PersonalFinanceTracker />;
+  return <FinTech24 />;
 }
 
 export default App;
