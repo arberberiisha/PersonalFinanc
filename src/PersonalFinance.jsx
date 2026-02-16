@@ -9,7 +9,8 @@ import {
   FileSpreadsheet, Trash2, Plus, FileText, Edit3, X, Check, Lock, Unlock,
   TrendingUp, TrendingDown, DollarSign, Camera, Tag, Calendar,
   Percent, AlertCircle, HeartPulse, PieChart, ShieldCheck, Sparkles,
-  Receipt, Lightbulb, Activity, ChevronLeft, ChevronRight, Upload, Download
+  Receipt, Lightbulb, Activity, ChevronLeft, ChevronRight, Upload, Download,
+  Layers, HelpCircle
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -25,6 +26,9 @@ import { exportToATK } from "./utils/exportToATK";
 const PersonalFinance = ({ darkMode }) => {
   const { translations: t, language } = useTranslations();
   const getSavedMonth = () => localStorage.getItem("lastMonth");
+
+  // --- INFO MODAL STATE ---
+  const [showInfoModal, setShowInfoModal] = useState(false);
 
   const monthNames = {
     en: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
@@ -312,13 +316,84 @@ const PersonalFinance = ({ darkMode }) => {
     try { await uploadBillImage({ file, setEntries }); } catch (err) { showError(t.aiUnavailableTitle, t.aiUnavailableMessage); }
   };
 
+  const handleSmartExport = async () => {
+    const currentYear = form.year;
+    const currentMonth = form.month;
+
+    const { value: periodType } = await Swal.fire({
+        title: language === 'sq' ? 'Zgjidh Periudhën e Eksportit' : 'Select Export Period',
+        input: 'select',
+        inputOptions: {
+            'month': language === 'sq' ? `Muaji Aktual (${currentMonth})` : `Current Month (${currentMonth})`,
+            'q1': 'Q1 (Jan - Mar)',
+            'q2': 'Q2 (Apr - Jun)',
+            'q3': 'Q3 (Jul - Sep)',
+            'q4': 'Q4 (Oct - Dec)',
+            'year': language === 'sq' ? `Viti i Plotë (${currentYear})` : `Full Year (${currentYear})`
+        },
+        inputPlaceholder: language === 'sq' ? 'Zgjidhni...' : 'Select...',
+        showCancelButton: true,
+        confirmButtonColor: '#1e293b', 
+    });
+
+    if (!periodType) return;
+
+    let periodLabel = "";
+    let dataToExport = [];
+
+    const months = monthNames[language]; 
+
+    if (periodType === 'month') {
+        periodLabel = `${currentMonth}`;
+        dataToExport = entries.filter(e => e.month === currentMonth && e.year === currentYear);
+    } 
+    else if (periodType === 'year') {
+        periodLabel = `Vjetor`;
+        dataToExport = entries.filter(e => e.year === currentYear);
+    } 
+    else {
+        let targetMonths = [];
+        if (periodType === 'q1') { targetMonths = [months[0], months[1], months[2]]; periodLabel = "Q1"; }
+        if (periodType === 'q2') { targetMonths = [months[3], months[4], months[5]]; periodLabel = "Q2"; }
+        if (periodType === 'q3') { targetMonths = [months[6], months[7], months[8]]; periodLabel = "Q3"; }
+        if (periodType === 'q4') { targetMonths = [months[9], months[10], months[11]]; periodLabel = "Q4"; }
+
+        dataToExport = entries.filter(e => e.year === currentYear && targetMonths.includes(e.month));
+    }
+
+    if (dataToExport.length === 0) {
+        Swal.fire("Info", language === 'sq' ? 'Nuk ka të dhëna për këtë periudhë.' : 'No data found for this period.', "info");
+        return;
+    }
+
+    exportToATK({ 
+        entries: dataToExport, 
+        periodLabel: periodLabel, 
+        year: currentYear 
+    });
+  };
+
   const paginated = useMemo(() => {
     return filteredEntries.slice((page - 1) * perPage, page * perPage);
   }, [filteredEntries, page, perPage]);
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pf-container">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pf-container position-relative">
       
+      {/* HEADER WITH INFO BUTTON */}
+      <div className="d-flex align-items-center justify-content-between mb-4">
+          <h4 className="fw-bold text-dark mb-0">
+              {t.personalFinance}
+          </h4>
+          <button 
+            className="btn btn-light btn-sm text-muted border shadow-sm d-flex align-items-center gap-2"
+            onClick={() => setShowInfoModal(true)}
+          >
+              <HelpCircle size={16} />
+              <span className="d-none d-md-inline">{language === 'sq' ? 'Si funksionon?' : 'How it works'}</span>
+          </button>
+      </div>
+
       {/* 1. STATS CARDS */}
       <div className="row g-4 mb-4">
         {[
@@ -598,11 +673,10 @@ const PersonalFinance = ({ darkMode }) => {
         </div>
       </div>
 
-      {/* 6. TOOLBAR ACTIONS - CLEAN ALIGNMENT */}
+      {/* 6. TOOLBAR ACTIONS */}
       <div className="pf-card shadow-sm border-0 no-print p-3 bg-white">
         <div className="d-flex flex-column flex-lg-row justify-content-between align-items-center gap-4">
           
-          {/* Group 1: Pagination (Left Side) */}
           <div className="d-flex align-items-center gap-2">
             <button className="btn btn-outline-secondary btn-sm d-flex align-items-center px-3" disabled={page === 1} onClick={() => setPage(page-1)}>
                 <ChevronLeft size={16} className="me-1"/> {t.prev || "Prev"}
@@ -613,10 +687,8 @@ const PersonalFinance = ({ darkMode }) => {
             </button>
           </div>
 
-          {/* Group 2: Actions (Right Side) */}
           <div className="d-flex flex-wrap gap-2 justify-content-center align-items-center">
             
-            {/* Lock Action Group */}
             <button 
                 className={`btn btn-sm d-flex align-items-center gap-2 px-3 fw-bold transition-all ${isCurrentMonthLocked ? 'btn-danger shadow-sm' : 'btn-outline-dark'}`}
                 onClick={toggleMonthLock}
@@ -626,7 +698,6 @@ const PersonalFinance = ({ darkMode }) => {
 
             <div className="vr d-none d-md-block mx-1 text-muted opacity-25"></div>
 
-            {/* Import Group */}
             <div className="btn-group shadow-sm">
                 <input type="file" ref={excelInputRef} className="d-none" onChange={handleFileUpload} multiple />
                 <input type="file" ref={imageInputRef} className="d-none" onChange={handleBillImageUpload} />
@@ -638,7 +709,6 @@ const PersonalFinance = ({ darkMode }) => {
                 </button>
             </div>
 
-            {/* Export Group */}
             <div className="btn-group shadow-sm">
                 <button className="btn btn-white border-secondary-subtle btn-sm text-dark d-flex align-items-center gap-2 px-3" onClick={handleDownloadFinancePDF}>
                     <FileText size={14} className="text-danger"/> PDF
@@ -649,12 +719,12 @@ const PersonalFinance = ({ darkMode }) => {
                 }}>
                     <FileSpreadsheet size={14} className="text-success"/> Excel
                 </button>
-                <button className="btn btn-dark btn-sm d-flex align-items-center gap-2 px-3" onClick={() => exportToATK({ entries: filteredEntries, month: form.month, year: form.year })}>
-                    <ShieldCheck size={14} className="text-info"/> ATK
+                
+                <button className="btn btn-dark btn-sm d-flex align-items-center gap-2 px-3" onClick={handleSmartExport}>
+                    <Layers size={14} className="text-info"/> ATK
                 </button>
             </div>
 
-            {/* Clear All Group */}
             <button disabled={isCurrentMonthLocked} className="btn btn-outline-danger btn-sm shadow-sm d-flex align-items-center justify-content-center" onClick={() => setEntries([])} style={{ width: '36px', height: '32px' }} title="Clear All">
                 <Trash2 size={16}/>
             </button>
@@ -662,6 +732,78 @@ const PersonalFinance = ({ darkMode }) => {
           </div>
         </div>
       </div>
+
+      {/* --- INFO MODAL POPUP (FIXED VISIBILITY & TRANSLATIONS) --- */}
+      <AnimatePresence>
+        {showInfoModal && (
+            <div 
+                style={{
+                    position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+                    zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.5)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)'
+                }}
+            >
+                <motion.div 
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ duration: 0.2 }}
+                    className="bg-white rounded-4 shadow-lg overflow-hidden"
+                    style={{ maxWidth: '800px', width: '90%', maxHeight: '90vh', overflowY: 'auto', position: 'relative' }}
+                >
+                    <div className="bg-primary text-white p-3 d-flex justify-content-between align-items-center">
+                        <h5 className="mb-0 fw-bold d-flex align-items-center gap-2">
+                            <HelpCircle size={22}/> {language === 'sq' ? 'Udhëzues: Financat Ditore' : 'Guide: Personal Finance'}
+                        </h5>
+                        <button 
+                            onClick={() => setShowInfoModal(false)}
+                            className="btn btn-sm btn-close-white"
+                            style={{ background: 'none', border: 'none', color: 'white', fontSize: '1.5rem', lineHeight: 1, cursor: 'pointer' }}
+                        >
+                            &times;
+                        </button>
+                    </div>
+
+                    <div className="p-4">
+                        <div className="row g-4">
+                            <div className="col-md-6">
+                                <h6 className="fw-bold text-dark mb-2">📌 {language === 'sq' ? 'Për çfarë shërben kjo faqe?' : 'What is this used for?'}</h6>
+                                <p className="small text-muted mb-3">
+                                    {language === 'sq' 
+                                      ? "Ky është Paneli Ditor i Transaksioneve. Përdoreni këtë faqe për të regjistruar faturat dhe të hyrat në kohë reale, ashtu siç ndodhin."
+                                      : "This is the Daily Operational Hub. Use this page to log every single bill, invoice, and income source as they happen."}
+                                </p>
+                                <ul className="small text-muted ps-3 mb-0">
+                                    <li>{language === 'sq' ? 'Regjistrimi i shpenzimeve dhe faturave ditore.' : 'Recording day-to-day expenses.'}</li>
+                                    <li>{language === 'sq' ? 'Monitorimi i rrjedhës së parasë (Të Hyra vs Shpenzime).' : 'Tracking cash flow (Income vs. Expense).'}</li>
+                                    <li>{language === 'sq' ? 'Përgatitja e Librave të Blerjes/Shitjes për ATK.' : 'Generating Monthly ATK Reports (VAT).'}</li>
+                                </ul>
+                            </div>
+                            <div className="col-md-6">
+                                <h6 className="fw-bold text-dark mb-2">⏰ {language === 'sq' ? 'Kur duhet përdorur?' : 'When to use it?'}</h6>
+                                <p className="small text-muted mb-3">
+                                    {language === 'sq' ? 'Çdo ditë ose Javë. Mos i lini grumbull për fund të vitit!' : 'Daily or Weekly. Don\'t wait until the end of the year!'}
+                                </p>
+                                <div className="p-3 bg-info bg-opacity-10 rounded border border-info border-opacity-25 d-flex gap-2 align-items-start">
+                                    <Lightbulb size={18} className="text-info mt-1 flex-shrink-0"/>
+                                    <div className="small text-dark">
+                                        <strong>{language === 'sq' ? 'Këshillë:' : 'Pro Tip:'}</strong> {language === 'sq' ? 'Përdorni butonin "Scan" për të fotografuar dhe ruajtur faturat fizike direkt nga telefoni.' : 'Use the "Scan Receipt" feature to quickly digitize paper bills from your phone.'}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="p-3 bg-light border-top text-end">
+                        <button className="btn btn-primary px-4" onClick={() => setShowInfoModal(false)}>
+                            {language === 'sq' ? 'Në rregull' : 'Got it'}
+                        </button>
+                    </div>
+                </motion.div>
+            </div>
+        )}
+      </AnimatePresence>
+
     </motion.div>
   );
 };

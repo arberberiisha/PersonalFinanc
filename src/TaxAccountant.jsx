@@ -5,11 +5,13 @@ import { useTranslations } from "./LanguageContext";
 import { 
   UploadCloud, FileSpreadsheet, Download, 
   TrendingUp, TrendingDown, Building2, AlertCircle,
-  FileCheck, Trash2, CalendarCheck, Activity, Users
+  FileCheck, Trash2, CalendarCheck, Activity, Users, HelpCircle,
+  Scale, Landmark, Plus, ArrowRight
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { saveAs } from 'file-saver'; 
+import { Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis } from 'recharts';
 
 const TaxAccountant = () => {
   const { translations: t, language } = useTranslations();
@@ -19,6 +21,7 @@ const TaxAccountant = () => {
   const [companyName, setCompanyName] = useState("RB Tech");
   const [entries, setEntries] = useState([]);
   const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [showInfoModal, setShowInfoModal] = useState(false);
   
   const TAX_RATES = {
     PROFIT_TAX: 0.10,
@@ -28,7 +31,7 @@ const TaxAccountant = () => {
 
   const fileInputRef = useRef();
 
-  // --- BATCH IMPORT LOGIC (UPDATED FOR PAYROLL INTEGRATION) ---
+  // --- SMART BATCH IMPORT LOGIC ---
   const handleBatchImport = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
@@ -39,197 +42,217 @@ const TaxAccountant = () => {
 
     Swal.fire({ title: t.importDesc || 'Analyzing...', didOpen: () => Swal.showLoading() });
 
-    for (const file of files) {
-      const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(await file.arrayBuffer());
-      const worksheet = workbook.getWorksheet(1);
-      
-      // Determine file type
-      const headerRow = worksheet.getRow(1).values;
-      const isPayrollFile = headerRow.includes('Employee Name') && headerRow.includes('Total Company Cost');
+    try {
+        for (const file of files) {
+          const workbook = new ExcelJS.Workbook();
+          await workbook.xlsx.load(await file.arrayBuffer());
+          
+          const worksheet = workbook.getWorksheet(1);
+          if (!worksheet) continue;
 
-      fileMetadata.push({ 
-          name: file.name, 
-          size: (file.size / 1024).toFixed(1) + " KB",
-          type: isPayrollFile ? 'PAYROLL' : 'STANDARD'
-      });
+          let fileType = 'JOURNAL';
+          let detectedData = [];
 
-      if (isPayrollFile) {
-          // --- PAYROLL FILE LOGIC ---
-          // In the PayrollManager export, we store total sum in the row after data
-          // But safer to just iterate and sum up the 'Total Company Cost' column (index 7 based on export)
-          let totalPayrollCost = 0;
-          let monthStr = "General";
+          // 1. SCAN FOR HEADER ROW
+          let headerRowIndex = -1;
+          let colMap = { amount: -1, category: -1, type: -1, date: -1 };
 
           worksheet.eachRow((row, rowNumber) => {
-             if (rowNumber > 1) {
-                 const vals = row.values;
-                 // Check if it's a data row (has name and cost)
-                 if (vals[1] && vals[7] && vals[1] !== "TOTALS" && vals[1] !== "META") {
-                     totalPayrollCost += Number(vals[7]);
-                 }
-                 // Check if it is the META row we added in PayrollManager
-                 if (vals[1] === "META") {
-                     monthStr = vals[2]; // Month from meta
-                 }
-             }
+              if (rowNumber > 10 || headerRowIndex !== -1) return; 
+              
+              const values = row.values.map(v => v ? v.toString().toLowerCase().trim() : "");
+              const hasAmount = values.some(v => v.includes('amount') || v.includes('shuma') || v.includes('total') || v.includes('actual'));
+
+              if (hasAmount) {
+                  headerRowIndex = rowNumber;
+                  values.forEach((val, idx) => {
+                      if (val.includes('amount') || val.includes('shuma') || val.includes('actual') || val.includes('total')) colMap.amount = idx;
+                      if (val.includes('category') || val.includes('kategoria') || val.includes('desc')) colMap.category = idx;
+                      if (val.includes('type') || val.includes('tipi')) colMap.type = idx;
+                      if (val.includes('date') || val.includes('data')) colMap.date = idx;
+                  });
+
+                  if (values.includes('employee name') || values.includes('emri') || values.includes('net salary')) {
+                      fileType = 'PAYROLL';
+                  }
+              }
           });
 
-          if (totalPayrollCost > 0) {
-              aggregatedEntries.push({
-                  type: "Expense",
-                  category: "Pagat & Kontributet", // Official Category Name
-                  amount: totalPayrollCost,
-                  month: monthStr,
-                  source: "Payroll"
+          // 2. PARSE DATA
+          if (headerRowIndex !== -1) {
+              worksheet.eachRow((row, rowNumber) => {
+                  if (rowNumber <= headerRowIndex) return; 
+
+                  const rowVal = row.values;
+                  
+                  const amountVal = colMap.amount > -1 ? rowVal[colMap.amount] : null;
+                  const categoryVal = colMap.category > -1 ? rowVal[colMap.category] : "General";
+                  let typeVal = colMap.type > -1 ? rowVal[colMap.type] : "Expense"; 
+
+                  if (fileType === 'PAYROLL') typeVal = "Expense";
+
+                  let parsedAmount = 0;
+                  if (typeof amountVal === 'number') parsedAmount = amountVal;
+                  else if (typeof amountVal === 'string') parsedAmount = parseFloat(amountVal.replace(/[^0-9.-]+/g,""));
+
+                  if (parsedAmount && parsedAmount !== 0) {
+                      detectedData.push({
+                          type: typeVal,
+                          category: categoryVal ? categoryVal.toString() : "Uncategorized",
+                          amount: Math.abs(parsedAmount),
+                          source: fileType
+                      });
+                  }
+              });
+          } else {
+              // 3. FALLBACK BLIND EXTRACTION
+              worksheet.eachRow((row, rowNumber) => {
+                  const vals = row.values;
+                  const numericIndex = vals.findIndex(v => typeof v === 'number');
+                  
+                  if (numericIndex > -1) {
+                      const amount = vals[numericIndex];
+                      const category = typeof vals[numericIndex - 1] === 'string' ? vals[numericIndex - 1] : "Imported Item";
+                      
+                      detectedData.push({
+                          type: "Expense",
+                          category: category,
+                          amount: Math.abs(amount),
+                          source: "Unknown Format"
+                      });
+                  }
               });
           }
 
-      } else {
-          // --- STANDARD LOGIC (Old Logic) ---
-          worksheet.eachRow((row, rowNumber) => {
-            if (rowNumber > 2) {
-                const rowVal = row.values;
-                if(rowVal[3] && rowVal[6]) {
-                    aggregatedEntries.push({
-                        type: rowVal[3], 
-                        category: rowVal[4],
-                        amount: Number(rowVal[6]),
-                        month: rowVal[1],
-                        source: "Bank/Manual"
-                    });
-                }
-            }
-          });
-      }
-    }
+          if (detectedData.length > 0) {
+              aggregatedEntries = [...aggregatedEntries, ...detectedData];
+              fileMetadata.push({ 
+                  name: file.name, 
+                  size: (file.size / 1024).toFixed(1) + " KB", 
+                  type: fileType,
+                  count: detectedData.length 
+              });
+          }
+        }
 
-    setUploadedFiles(prev => [...prev, ...fileMetadata]);
-    setEntries(prev => [...prev, ...aggregatedEntries]);
-    Swal.close();
-    Swal.fire("Success", `Imported successfully.`, "success");
-    e.target.value = null;
+        setUploadedFiles(prev => [...prev, ...fileMetadata]);
+        setEntries(prev => [...prev, ...aggregatedEntries]);
+        Swal.close();
+        
+        if (aggregatedEntries.length > 0) {
+            Swal.fire({
+                icon: 'success', 
+                title: 'Data Merged',
+                text: `Successfully combined ${aggregatedEntries.length} transactions.`
+            });
+        } else {
+             Swal.fire("Warning", "No readable data found.", "warning");
+        }
+        
+    } catch (error) {
+        console.error(error);
+        Swal.fire("Error", "Failed to parse files.", "error");
+    }
+    
+    e.target.value = null; 
   };
 
   // --- CALCULATIONS ---
-  const totalIncome = entries.filter(e => ["Income", "Të ardhura"].includes(e.type)).reduce((sum, e) => sum + e.amount, 0);
-  const totalExpense = entries.filter(e => ["Expense", "Shpenzime"].includes(e.type)).reduce((sum, e) => sum + e.amount, 0);
+  const totalIncome = entries
+    .filter(e => ["Income", "Të ardhura", "Income"].includes(e.type) || (typeof e.type === 'string' && e.type.toLowerCase().includes('income')))
+    .reduce((sum, e) => sum + e.amount, 0);
+    
+  const totalExpense = entries
+    .filter(e => ["Expense", "Shpenzime", "Expenses"].includes(e.type) || (typeof e.type === 'string' && e.type.toLowerCase().includes('expense')))
+    .reduce((sum, e) => sum + e.amount, 0);
   
   const grossProfit = totalIncome - totalExpense;
   const taxableProfit = grossProfit > 0 ? grossProfit : 0;
   
   const estimatedVAT_Owe = totalIncome * TAX_RATES.VAT;
-  // Note: Payroll expenses (Salaries) do NOT have deductible VAT. 
-  // We filter out Payroll from VAT Claim.
-  const expensesWithVAT = entries.filter(e => 
-      ["Expense", "Shpenzime"].includes(e.type) && e.category !== "Pagat & Kontributet"
-  ).reduce((sum, e) => sum + e.amount, 0);
+  const expensesWithVAT = entries.filter(e => {
+      const isExpense = ["Expense", "Shpenzime"].includes(e.type) || (typeof e.type === 'string' && e.type.toLowerCase().includes('expense'));
+      const isPayroll = e.source === 'PAYROLL' || (e.category && e.category.toLowerCase().includes('pag'));
+      return isExpense && !isPayroll;
+  }).reduce((sum, e) => sum + e.amount, 0);
 
   const estimatedVAT_Claim = expensesWithVAT * TAX_RATES.VAT;
   const netVAT = estimatedVAT_Owe - estimatedVAT_Claim;
 
   const pensionContribution = (grossProfit * TAX_RATES.PENSION);
-  const profitTax = taxableProfit * TAX_RATES.PROFIT_TAX;
-  
-  const totalTaxLiability = (netVAT > 0 ? netVAT : 0) + profitTax + (pensionContribution > 0 ? pensionContribution : 0);
+  const profitTax = taxableProfit * TAX_RATES.PROFIT_TAX; 
+  const totalTaxLiability = (netVAT > 0 ? netVAT : 0) + profitTax;
 
-  // --- EXCEL EXPORT ---
+  // --- CHARTS & EXPORT ---
+  const waterfallData = [
+      { name: 'Revenue', value: totalIncome, fill: '#10b981' }, 
+      { name: 'Expenses', value: totalExpense, fill: '#ef4444' }, 
+      { name: 'Gross Profit', value: grossProfit, fill: '#3b82f6' }, 
+      { name: 'Taxes', value: totalTaxLiability, fill: '#f59e0b' }, 
+      { name: 'Net Pocket', value: grossProfit - totalTaxLiability, fill: '#6366f1' } 
+  ];
+
   const generateDeclarationExcel = async () => {
     const ExcelJS = await import("exceljs");
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet("Tax Declaration");
+    const sheet = workbook.addWorksheet("Annual Declaration");
 
     sheet.columns = [
-      { header: t.description, key: 'desc', width: 35 },
-      { header: 'Base', key: 'base', width: 20 },
-      { header: 'Rate', key: 'rate', width: 15 },
-      { header: t.totalPayable, key: 'total', width: 20 },
+      { header: 'Item', key: 'desc', width: 30 },
+      { header: 'Value', key: 'val', width: 20 },
+      { header: 'Notes', key: 'note', width: 40 },
     ];
 
-    sheet.mergeCells('A1:D1');
-    sheet.getCell('A1').value = `${companyName.toUpperCase()} - ${t.annualDeclaration.toUpperCase()}`;
-    sheet.getCell('A1').font = { size: 16, bold: true };
+    sheet.mergeCells('A1:C1');
+    sheet.getCell('A1').value = `TAX DECLARATION - ${year}`;
+    sheet.getCell('A1').font = { size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+    sheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
     sheet.getCell('A1').alignment = { horizontal: 'center' };
 
-    sheet.addRow([`${t.fiscalYear}: ${year}`, "", "", `Generated: ${new Date().toLocaleDateString()}`]);
-    sheet.addRow([`${t.entityType}: ${businessType}`, "", "", ""]);
-    sheet.addRow([]); 
-
-    const rows = [
-      [t.totalRevenue, totalIncome, "-", "-"],
-      [t.totalDeductions, totalExpense, "-", "-"],
-      [t.netProfit, grossProfit, "-", "-"],
-      ["", "", "", ""],
-      [t.profitTax, taxableProfit, "10%", profitTax],
-      [t.pension, grossProfit, "5%", pensionContribution],
-      [t.vatBalance, netVAT > 0 ? netVAT : 0, "18%", netVAT > 0 ? netVAT : 0]
+    const dataRows = [
+        ["Total Revenue", totalIncome, "Gross income from all sources"],
+        ["Total Expenses", totalExpense, "Includes Payroll & Operational costs"],
+        ["Gross Profit", grossProfit, "Revenue - Expenses"],
+        ["", "", ""],
+        ["Taxable Base", taxableProfit, "Same as Gross Profit for standard LLC"],
+        ["Profit Tax (10%)", profitTax, "Corporate Income Tax (CD)"],
+        ["VAT Liability", netVAT > 0 ? netVAT : 0, "Net VAT payable to ATK"],
+        ["", "", ""],
+        ["TOTAL PAYABLE", totalTaxLiability, "Transfer this amount to Tax Admin"]
     ];
 
-    rows.forEach(r => sheet.addRow(r));
-    sheet.addRow([]);
-    const totalRow = sheet.addRow(["TOTAL PAYABLE", "", "", totalTaxLiability]);
-    totalRow.font = { bold: true };
-    totalRow.getCell(4).numFmt = '€#,##0.00';
+    dataRows.forEach(r => sheet.addRow(r));
+    sheet.getRow(10).font = { bold: true };
+    sheet.getCell('B10').numFmt = '€#,##0.00';
 
     const buffer = await workbook.xlsx.writeBuffer();
-    saveAs(new Blob([buffer]), `${companyName}_Tax_Declaration_${year}.xlsx`);
+    saveAs(new Blob([buffer]), `${companyName}_Official_Tax_Report_${year}.xlsx`);
   };
 
-  // --- PDF GENERATION ---
   const generateDeclarationPDF = () => {
     const doc = new jsPDF("p", "mm", "a4");
-    const primaryColor = [79, 70, 229]; 
-
-    doc.setFontSize(18); doc.setFont("helvetica", "bold"); doc.setTextColor(...primaryColor);
-    doc.text(companyName.toUpperCase(), 15, 20); 
-    
-    doc.setFontSize(12); doc.setTextColor(100);
-    doc.text(t.annualDeclaration, 15, 28);
-
-    doc.setFontSize(10); doc.setTextColor(100);
-    doc.text(`${t.fiscalYear}: ${year}`, 15, 35);
-    doc.text(`${t.entityType}: ${businessType}`, 15, 40);
-    
-    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 195, 20, { align: "right" });
-
-    doc.setDrawColor(...primaryColor); doc.setLineWidth(1);
-    doc.line(15, 45, 195, 45);
+    doc.setFillColor(30, 41, 59); doc.rect(0, 0, 210, 40, 'F');
+    doc.setFontSize(22); doc.setTextColor(255, 255, 255);
+    doc.text(companyName.toUpperCase(), 15, 20);
+    doc.setFontSize(10); doc.setTextColor(200, 200, 200);
+    doc.text(`Official Tax Declaration Summary - ${year}`, 15, 30);
 
     autoTable(doc, {
-      startY: 55,
-      head: [[t.description.toUpperCase(), "BASE", "RATE", t.totalPayable.toUpperCase()]], 
-      body: [
-        [t.totalRevenue, `€ ${totalIncome.toFixed(2)}`, "-", "-"],
-        [t.totalDeductions, `(€ ${totalExpense.toFixed(2)})`, "-", "-"],
-        [t.netProfit, `€ ${grossProfit.toFixed(2)}`, "-", "-"],
-        ["", "", "", ""], 
-        [t.profitTax, `€ ${taxableProfit.toFixed(2)}`, "10%", `€ ${profitTax.toFixed(2)}`],
-        [t.pension, `€ ${grossProfit.toFixed(2)}`, "5%", `€ ${pensionContribution.toFixed(2)}`],
-        [t.vatBalance, `€ ${Math.max(0, netVAT).toFixed(2)}`, "18%", `€ ${Math.max(0, netVAT).toFixed(2)}`],
-      ],
-      theme: "grid",
-      headStyles: { fillColor: primaryColor, textColor: 255, fontStyle: "bold" },
-      columnStyles: {
-        0: { cellWidth: 80 },
-        1: { halign: "right" },
-        2: { halign: "center" },
-        3: { halign: "right", fontStyle: "bold" }
-      },
-      didParseCell: (data) => {
-        if (data.row.index === 2) data.cell.styles.fontStyle = "bold"; 
-      }
+        startY: 50,
+        head: [['Description', 'Amount', 'Notes']],
+        body: [
+            ['Total Revenue', `€ ${totalIncome.toLocaleString()}`, 'Aggregated from Sales'],
+            ['Total Expenses', `(€ ${totalExpense.toLocaleString()})`, 'Operational + Payroll'],
+            ['GROSS PROFIT', `€ ${grossProfit.toLocaleString()}`, 'Before Tax'],
+            ['Profit Tax (10%)', `€ ${profitTax.toLocaleString()}`, 'CD Tax Line'],
+            ['Net VAT', `€ ${netVAT > 0 ? netVAT.toLocaleString() : '0.00'}`, 'Payable VAT'],
+            ['TOTAL LIABILITY', `€ ${totalTaxLiability.toLocaleString()}`, 'Total to Pay'],
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [79, 70, 229] },
+        footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold' }
     });
-
-    const finalY = doc.lastAutoTable.finalY + 15;
-    
-    doc.setFillColor(245, 245, 245);
-    doc.rect(100, finalY - 8, 95, 18, "F"); 
-    
-    doc.setFontSize(12); doc.setTextColor(0); doc.setFont("helvetica", "bold");
-    doc.text(t.totalPayable, 105, finalY + 4); 
-    doc.text(`€ ${totalTaxLiability.toFixed(2)}`, 190, finalY + 4, { align: "right" });
-
-    doc.save(`${companyName}_Tax_Declaration_${year}.pdf`);
+    doc.save(`${companyName}_Declaration_${year}.pdf`);
   };
 
   return (
@@ -237,159 +260,184 @@ const TaxAccountant = () => {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="card shadow-sm border-0">
         <div className="card-body p-4 p-md-5">
           
-          {/* Header */}
+          {/* IMPORTANT: Hidden Input must be OUTSIDE conditional blocks */}
+          <input 
+             type="file" 
+             ref={fileInputRef} 
+             multiple 
+             accept=".xlsx" 
+             className="d-none" 
+             onChange={handleBatchImport} 
+          />
+
+          {/* HEADER */}
           <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-5 border-bottom pb-4 gap-3">
             <div>
-              <h2 className="fw-bold text-primary mb-1"><Building2 className="me-2"/> {t.taxAccountant}</h2>
-              <div className="d-flex align-items-center gap-2">
-                 <input 
-                   type="text" 
-                   className="form-control form-control-sm border-0 bg-light fw-bold text-muted" 
-                   value={companyName}
-                   onChange={(e) => setCompanyName(e.target.value)}
-                   style={{width: "200px", fontSize: "14px"}}
-                 />
-                 <span className="text-muted small">| {t.annualDeclaration}</span>
+              <div className="d-flex align-items-center gap-3">
+                  <h2 className="fw-bold text-primary mb-1 d-flex align-items-center">
+                      <Scale className="me-2"/> {t.taxAccountant || "Tax Accountant"}
+                  </h2>
+                  <button className="btn btn-light btn-sm text-primary border shadow-sm rounded-circle p-2" onClick={() => setShowInfoModal(true)}>
+                      <HelpCircle size={18}/>
+                  </button>
               </div>
+              <p className="text-muted mb-0 small">
+                  {language === 'sq' ? "Agregoni të dhënat nga të gjitha burimet për mbylljen vjetore." : "Aggregate data from all sources for annual closing."}
+              </p>
             </div>
-            <div className="d-flex gap-3">
-               <select className="form-select fw-bold border-primary text-primary" 
-                 value={businessType} onChange={(e) => setBusinessType(e.target.value)} style={{width: '150px'}}>
-                 <option value="LLC">SH.P.K (LLC)</option>
-                 <option value="BI">B.I. (Individual)</option>
-               </select>
-               <select className="form-select fw-bold" value={year} onChange={(e) => setYear(Number(e.target.value))} style={{width: '100px'}}>
-                 {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+            
+            <div className="d-flex gap-2 align-items-center bg-light p-2 rounded shadow-sm border">
+               <Building2 size={18} className="text-muted ms-2"/>
+               <input type="text" className="form-control form-control-sm border-0 bg-transparent fw-bold" value={companyName} onChange={(e) => setCompanyName(e.target.value)} style={{width: "140px"}}/>
+               <div className="vr text-muted"></div>
+               <select className="form-select form-select-sm border-0 bg-transparent fw-bold" value={year} onChange={(e) => setYear(Number(e.target.value))} style={{width: '80px'}}>
+                 {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
                </select>
             </div>
           </div>
 
-          {/* MAIN ANALYSIS AREA */}
+          {/* MAIN CONTENT */}
           {entries.length === 0 ? (
-            <div className="text-center py-5 bg-light rounded-3 border-dashed mb-4">
-              <UploadCloud size={48} className="text-muted mb-3" />
-              <h4>{t.importBatch}</h4>
-              <p className="text-muted mb-4">{t.importDesc}</p>
-              <input type="file" ref={fileInputRef} multiple accept=".xlsx" className="d-none" onChange={handleBatchImport} />
-              <button className="btn btn-primary px-4 py-2 shadow-sm" onClick={() => fileInputRef.current.click()}>
-                <FileSpreadsheet className="me-2" size={18}/> {t.importBatch}
+            <div className="text-center py-5 bg-white border rounded-4 border-dashed mb-4">
+              <div className="mb-3 bg-primary bg-opacity-10 p-3 rounded-circle d-inline-block">
+                  <UploadCloud size={32} className="text-primary" />
+              </div>
+              <h4>{language === 'sq' ? 'Filloni duke importuar të dhëna' : 'Start by importing data'}</h4>
+              <p className="text-muted mb-4 px-3" style={{maxWidth: '500px', margin: '0 auto'}}>
+                  {language === 'sq' ? 'Ngarkoni fajllin Excel nga "Financat Personale".' : 'Upload the Excel file from "Personal Finance".'}
+              </p>
+              <button className="btn btn-primary px-4 py-2 shadow-sm fw-bold" onClick={() => fileInputRef.current.click()}>
+                <FileSpreadsheet className="me-2" size={18}/> {t.importBatch || "Select Excel Files"}
               </button>
             </div>
           ) : (
             <div className="row g-4">
               
-              {/* Left Side: Summary & Analysis */}
+              {/* LEFT DASHBOARD */}
               <div className="col-lg-8">
-                <div className="row g-3 mb-4">
-                  <div className="col-md-4">
-                    <div className="p-3 rounded-3 bg-success bg-opacity-10 border border-success border-opacity-25">
-                      <label className="extra-small fw-bold text-success text-uppercase mb-1">{t.totalRevenue}</label>
-                      <h3 className="fw-bold mb-0 text-success">€{totalIncome.toLocaleString()}</h3>
+                {/* Waterfall Chart */}
+                <div className="card shadow-sm border-0 mb-4">
+                    <div className="card-header bg-white border-0 pt-4 px-4 pb-0">
+                        <h6 className="fw-bold mb-0 text-dark">{language === 'sq' ? 'Analiza e Rrjedhës së Fitimit' : 'Profit Waterfall Analysis'}</h6>
                     </div>
-                  </div>
-                  <div className="col-md-4">
-                    <div className="p-3 rounded-3 bg-danger bg-opacity-10 border border-danger border-opacity-25">
-                      <label className="extra-small fw-bold text-danger text-uppercase mb-1">{t.totalDeductions}</label>
-                      <h3 className="fw-bold mb-0 text-danger">€{totalExpense.toLocaleString()}</h3>
+                    <div className="card-body ps-0">
+                        <div style={{ width: '100%', height: 250 }}>
+                            <ResponsiveContainer>
+                                <BarChart data={waterfallData} layout="vertical" margin={{top: 5, right: 30, left: 40, bottom: 5}}>
+                                    <XAxis type="number" hide />
+                                    <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 11}} />
+                                    <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'}} formatter={(value) => `€${value.toLocaleString()}`}/>
+                                    <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={25}>
+                                        {waterfallData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
                     </div>
-                  </div>
-                  <div className="col-md-4">
-                    <div className={`p-3 rounded-3 border border-opacity-25 ${grossProfit >= 0 ? 'bg-primary bg-opacity-10 border-primary' : 'bg-warning bg-opacity-10 border-warning'}`}>
-                      <label className={`extra-small fw-bold text-uppercase mb-1 ${grossProfit >= 0 ? 'text-primary' : 'text-warning'}`}>{t.netProfit}</label>
-                      <h3 className={`fw-bold mb-0 ${grossProfit >= 0 ? 'text-primary' : 'text-warning'}`}>€{grossProfit.toLocaleString()}</h3>
-                    </div>
-                  </div>
                 </div>
 
-                {/* The "Official Bill" Box */}
-                <div className="bg-dark text-white p-4 rounded-3 mb-4 shadow-lg border-start border-primary border-4">
-                  <div className="d-flex justify-content-between align-items-center border-bottom border-secondary pb-3 mb-4">
-                    <h5 className="mb-0 fw-bold d-flex align-items-center gap-2"><Activity size={18}/> {t.estimatedLiability}</h5>
-                    <span className="badge bg-primary px-3">{year} {businessType}</span>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="d-flex justify-content-between mb-3">
-                      <span className="text-secondary">{t.profitTax} (10%)</span>
-                      <span className="fw-bold">€{profitTax.toFixed(2)}</span>
+                {/* Tax Cards */}
+                <div className="row g-3">
+                    <div className="col-md-6">
+                        <div className="p-4 bg-white rounded-4 shadow-sm border-start border-warning border-4 h-100 position-relative overflow-hidden">
+                            <div className="d-flex justify-content-between align-items-start relative z-10">
+                                <div>
+                                    <span className="badge bg-warning text-dark mb-2">10% Rate</span>
+                                    <h6 className="text-muted text-uppercase small fw-bold mb-1">{t.profitTax || "Profit Tax (CD)"}</h6>
+                                    <h3 className="fw-bold text-dark mb-0">€{profitTax.toLocaleString(undefined, {minimumFractionDigits: 2})}</h3>
+                                </div>
+                                <Landmark className="text-warning opacity-50" size={32} />
+                            </div>
+                        </div>
                     </div>
-                    <div className="d-flex justify-content-between mb-3">
-                      <span className="text-secondary">{t.vatBalance} (18%)</span>
-                      <span className={netVAT > 0 ? "text-warning fw-bold" : "text-success fw-bold"}>
-                        {netVAT > 0 ? `+ €${netVAT.toFixed(2)}` : `- €${Math.abs(netVAT).toFixed(2)}`}
-                      </span>
+                    <div className="col-md-6">
+                        <div className="p-4 bg-white rounded-4 shadow-sm border-start border-info border-4 h-100 position-relative overflow-hidden">
+                            <div className="d-flex justify-content-between align-items-start relative z-10">
+                                <div>
+                                    <span className="badge bg-info text-dark mb-2">18% Standard</span>
+                                    <h6 className="text-muted text-uppercase small fw-bold mb-1">{t.vatBalance || "Net VAT Liability"}</h6>
+                                    <h3 className="fw-bold text-dark mb-0">€{Math.max(0, netVAT).toLocaleString(undefined, {minimumFractionDigits: 2})}</h3>
+                                </div>
+                                <Activity className="text-info opacity-50" size={32} />
+                            </div>
+                        </div>
                     </div>
-                    <div className="d-flex justify-content-between mb-3">
-                      <span className="text-secondary">{t.pension} (5%)</span>
-                      <span className="fw-bold">€{Math.max(0, pensionContribution).toFixed(2)}</span>
+                </div>
+
+                {/* Final Pay Box */}
+                <div className="mt-4 p-4 rounded-4 bg-dark text-white d-flex flex-column flex-md-row justify-content-between align-items-center shadow-lg">
+                    <div className="mb-3 mb-md-0">
+                        <h5 className="fw-bold mb-1">{language === 'sq' ? 'Totali për Pagesë' : 'Total Payable Amount'}</h5>
+                        <p className="text-secondary small mb-0">{language === 'sq' ? 'Shuma totale që duhet transferuar në ATK.' : 'This is the final amount to transfer to the Tax Admin.'}</p>
                     </div>
-                  </div>
-                  <div className="mt-4 pt-3 border-top border-secondary d-flex justify-content-between align-items-end">
-                    <div className="text-secondary small fst-italic">Official Tax Base: €{taxableProfit.toLocaleString()}</div>
                     <div className="text-end">
-                      <label className="text-primary small fw-bold d-block text-uppercase mb-1">{t.totalPayable}</label>
-                      <h2 className="fw-bold mb-0 text-white display-6">€{totalTaxLiability.toFixed(2)}</h2>
+                        <h1 className="fw-bold mb-0 text-success display-5">€{totalTaxLiability.toLocaleString(undefined, {minimumFractionDigits: 2})}</h1>
                     </div>
-                  </div>
                 </div>
               </div>
 
-              {/* Right Side: Source Verification Sidebar */}
+              {/* RIGHT SIDEBAR */}
               <div className="col-lg-4">
-                <div className="card border h-100 bg-light bg-opacity-50 shadow-none">
-                  <div className="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
-                    <h6 className="mb-0 fw-bold d-flex align-items-center gap-2">
-                      <FileCheck size={18} className="text-primary"/> {language === 'sq' ? 'Skedarët e Ngarkuar' : 'Verified Sources'}
-                    </h6>
-                    <button className="btn btn-sm btn-outline-danger border-0" onClick={() => { setEntries([]); setUploadedFiles([]); }}>
-                      <Trash2 size={16}/>
-                    </button>
-                  </div>
-                  <div className="card-body p-0 overflow-auto" style={{maxHeight: "400px"}}>
-                    <ul className="list-group list-group-flush">
-                      {uploadedFiles.map((file, idx) => (
-                        <li key={idx} className="list-group-item d-flex align-items-center gap-3 py-3">
-                          <div className={`p-2 bg-white rounded border ${file.type === 'PAYROLL' ? 'border-primary' : ''}`}>
-                            {file.type === 'PAYROLL' ? <Users size={20} className="text-primary"/> : <FileSpreadsheet size={20} className="text-success" />}
-                          </div>
-                          <div className="overflow-hidden">
-                            <p className="mb-0 small fw-bold text-truncate">{file.name}</p>
-                            <p className="mb-0 extra-small text-muted">{file.type} • {file.size}</p>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                    
-                    {/* Period Coverage Visualizer */}
-                    <div className="p-3 border-top bg-white">
-                      <h6 className="extra-small fw-bold text-uppercase text-muted mb-3 d-flex align-items-center gap-2">
-                        <CalendarCheck size={14}/> Period Coverage
-                      </h6>
-                      <div className="d-flex flex-wrap gap-1">
-                        {t.months.map(m => {
-                          const isImported = entries.some(e => e.month === m);
-                          return (
-                            <span key={m} className={`badge ${isImported ? 'bg-success' : 'bg-secondary opacity-25'} extra-small`} style={{fontSize: '9px'}}>
-                              {m.substring(0,3).toUpperCase()}
-                            </span>
-                          );
-                        })}
-                      </div>
+                <div className="card shadow-sm border-0 mb-4">
+                    <div className="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                        <h6 className="fw-bold mb-0 small text-uppercase text-muted">{language === 'sq' ? 'Burimet e të Dhënave' : 'Data Sources'}</h6>
+                        <button className="btn btn-xs btn-light text-danger" onClick={() => { setEntries([]); setUploadedFiles([]); }}>
+                            <Trash2 size={14}/>
+                        </button>
                     </div>
-                  </div>
-                  <div className="card-footer bg-white p-3 border-top">
-                    <button className="btn btn-primary w-100 mb-2 shadow-sm d-flex align-items-center justify-content-center gap-2" onClick={generateDeclarationPDF}>
-                      <Download size={16}/> PDF Declaration
+                    <div className="list-group list-group-flush">
+                        {uploadedFiles.map((file, i) => (
+                            <div key={i} className="list-group-item d-flex align-items-center gap-3 py-3 border-0 border-bottom">
+                                <div className={`p-2 rounded ${file.type === 'PAYROLL' ? 'bg-primary bg-opacity-10 text-primary' : 'bg-success bg-opacity-10 text-success'}`}>
+                                    {file.type === 'PAYROLL' ? <Users size={16}/> : <FileSpreadsheet size={16}/>}
+                                </div>
+                                <div className="overflow-hidden">
+                                    <p className="mb-0 small fw-bold text-dark text-truncate">{file.name}</p>
+                                    <span className="badge bg-light text-muted border extra-small">{file.type} • {file.count} items</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="p-3 bg-light border-top">
+                        <button className="btn btn-outline-primary btn-sm w-100 border-dashed" onClick={() => fileInputRef.current.click()}>
+                            <Plus size={14} className="me-1"/> {language === 'sq' ? 'Shto tjetër burim' : 'Add another source'}
+                        </button>
+                    </div>
+                </div>
+
+                <div className="d-grid gap-2">
+                    <button className="btn btn-primary py-2 shadow-sm d-flex align-items-center justify-content-center gap-2" onClick={generateDeclarationPDF}>
+                        <Download size={18}/> {language === 'sq' ? 'Shkarko Deklaratën PDF' : 'Download PDF Declaration'}
                     </button>
-                    <button className="btn btn-outline-success w-100 d-flex align-items-center justify-content-center gap-2" onClick={generateDeclarationExcel}>
-                      <FileSpreadsheet size={16}/> Excel Export
+                    <button className="btn btn-white border py-2 shadow-sm d-flex align-items-center justify-content-center gap-2 text-dark" onClick={generateDeclarationExcel}>
+                        <FileSpreadsheet size={18} className="text-success"/> {language === 'sq' ? 'Eksporto në Excel' : 'Export to Excel'}
                     </button>
-                  </div>
                 </div>
               </div>
             </div>
           )}
         </div>
       </motion.div>
+
+      {/* MODAL SECTION (Same as before, hidden for brevity but included in rendering) */}
+      <AnimatePresence>
+        {showInfoModal && (
+            <div style={{position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(5px)'}}>
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="bg-white rounded-4 shadow-2xl overflow-hidden" style={{ maxWidth: '700px', width: '90%', position: 'relative' }}>
+                    <div className="bg-dark text-white p-4">
+                        <h4 className="mb-1 fw-bold">{language === 'sq' ? 'Si funksionon Kontabilisti?' : 'How the Tax Accountant Works'}</h4>
+                        <button onClick={() => setShowInfoModal(false)} className="position-absolute top-0 end-0 m-4 btn btn-sm text-white" style={{ fontSize: '1.5rem', lineHeight: 1 }}>&times;</button>
+                    </div>
+                    <div className="p-4">
+                       <p className="text-muted">{language === 'sq' ? 'Ky panel shërben për të bashkuar të gjitha të dhënat financiare (Faturat, Pagat, Bankën) në një raport të vetëm përfundimtar.' : 'This panel aggregates all financial data (Invoices, Payroll, Bank) into a single final report.'}</p>
+                    </div>
+                    <div className="p-3 bg-light text-end">
+                        <button className="btn btn-dark px-4" onClick={() => setShowInfoModal(false)}>{language === 'sq' ? 'Mbyll' : 'Close'}</button>
+                    </div>
+                </motion.div>
+            </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

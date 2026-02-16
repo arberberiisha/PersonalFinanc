@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Users, Plus, Trash2, Download, FileSpreadsheet, 
-  Wallet, Building, PieChart, Calculator, Calendar
+  Building, Wallet, PieChart, Calculator, Calendar, UserCheck
 } from "lucide-react";
 import { useTranslations } from "./LanguageContext";
 import jsPDF from "jspdf";
@@ -10,19 +10,43 @@ import autoTable from "jspdf-autotable";
 import { saveAs } from 'file-saver'; 
 
 const PayrollManager = () => {
-  const { translations: t, language } = useTranslations();
+  const { translations: t } = useTranslations();
   
+  // 1. FETCH WORKERS FROM DB
+  const [dbWorkers, setDbWorkers] = useState([]);
+  
+  useEffect(() => {
+      const saved = localStorage.getItem("rb_workers");
+      if (saved) setDbWorkers(JSON.parse(saved));
+  }, []);
+
   const [employees, setEmployees] = useState([]);
-  const [newEmployee, setNewEmployee] = useState({ name: "", amount: "", type: "gross" }); 
   
-  // Added Context for the Payroll Run
+  // State for the selection form
+  const [selectedWorkerId, setSelectedWorkerId] = useState("");
+  const [salaryOverride, setSalaryOverride] = useState("");
+  const [salaryType, setSalaryType] = useState("net");
+
   const [period, setPeriod] = useState({
       month: new Date().toLocaleString('default', { month: 'long' }),
       year: new Date().getFullYear()
   });
 
-  // --- KOSOVO PAYROLL LOGIC (2025 Standard) ---
-  
+  // When a worker is selected from dropdown, auto-fill salary
+  const handleWorkerSelect = (e) => {
+      const id = e.target.value;
+      setSelectedWorkerId(id);
+      
+      const worker = dbWorkers.find(w => w.id.toString() === id);
+      if (worker) {
+          setSalaryOverride(worker.salary);
+          setSalaryType(worker.salaryType || 'net');
+      } else {
+          setSalaryOverride("");
+      }
+  };
+
+  // --- KOSOVO PAYROLL LOGIC ---
   const calculateFromGross = (grossVal) => {
     const gross = Number(grossVal);
     const pensionEmployee = gross * 0.05; 
@@ -44,14 +68,7 @@ const PayrollManager = () => {
 
     const net = taxableSalary - tax;
 
-    return {
-      gross,
-      pensionEmployee,
-      pensionEmployer,
-      tax,
-      net,
-      totalCost: gross + pensionEmployer 
-    };
+    return { gross, pensionEmployee, pensionEmployer, tax, net, totalCost: gross + pensionEmployer };
   };
 
   const calculateFromNet = (targetNet) => {
@@ -68,24 +85,43 @@ const PayrollManager = () => {
     return calculateFromGross(high); 
   };
 
-  const addEmployee = () => {
-    if (newEmployee.name.trim() && Number(newEmployee.amount) > 0) {
-      let calculation;
-      if (newEmployee.type === 'gross') {
-          calculation = calculateFromGross(newEmployee.amount);
-      } else {
-          calculation = calculateFromNet(Number(newEmployee.amount));
-      }
+  const addEmployeeToPayroll = () => {
+    if (!selectedWorkerId) return;
 
-      setEmployees(prev => [...prev, { 
-          id: Date.now(), 
-          name: newEmployee.name, 
-          inputType: newEmployee.type,
-          inputAmount: newEmployee.amount,
-          ...calculation 
-      }]);
-      setNewEmployee({ name: "", amount: "", type: "gross" });
+    const workerDef = dbWorkers.find(w => w.id.toString() === selectedWorkerId);
+    if (!workerDef) return;
+
+    // Optional: Update the "Master Database" with the new salary if it changed
+    if (Number(salaryOverride) !== workerDef.salary) {
+        const updatedDb = dbWorkers.map(w => 
+            w.id.toString() === selectedWorkerId 
+            ? { ...w, salary: Number(salaryOverride), salaryType: salaryType } 
+            : w
+        );
+        setDbWorkers(updatedDb);
+        localStorage.setItem("rb_workers", JSON.stringify(updatedDb));
     }
+
+    let calculation;
+    if (salaryType === 'gross') {
+        calculation = calculateFromGross(salaryOverride);
+    } else {
+        calculation = calculateFromNet(Number(salaryOverride));
+    }
+
+    setEmployees(prev => [...prev, { 
+        id: Date.now(), // Unique ID for this payroll run
+        workerId: workerDef.id,
+        name: workerDef.name, 
+        role: workerDef.role,
+        inputType: salaryType,
+        inputAmount: salaryOverride,
+        ...calculation 
+    }]);
+
+    // Reset selection
+    setSelectedWorkerId("");
+    setSalaryOverride("");
   };
 
   const removeEmployee = (id) => {
@@ -97,12 +133,12 @@ const PayrollManager = () => {
       cost: acc.cost + e.totalCost,
       net: acc.net + e.net,
       taxes: acc.taxes + e.tax + e.pensionEmployee + e.pensionEmployer,
-      pensionTotal: acc.pensionTotal + e.pensionEmployee + e.pensionEmployer,
-      taxOnly: acc.taxOnly + e.tax
-    }), { cost: 0, net: 0, taxes: 0, pensionTotal: 0, taxOnly: 0 });
+      taxOnly: acc.taxOnly + e.tax,
+      pensionTotal: acc.pensionTotal + e.pensionEmployee + e.pensionEmployer
+    }), { cost: 0, net: 0, taxes: 0, taxOnly: 0, pensionTotal: 0 });
   }, [employees]);
 
-  // --- EXCEL EXPORT (FORMATTED FOR TAX ACCOUNTANT IMPORT) ---
+  // --- EXCEL EXPORT ---
   const downloadPayrollExcel = async () => {
     const ExcelJS = await import("exceljs");
     const workbook = new ExcelJS.Workbook();
@@ -110,12 +146,13 @@ const PayrollManager = () => {
 
     sheet.columns = [
       { header: 'Employee Name', key: 'name', width: 25 },
+      { header: 'Role', key: 'role', width: 15 },
       { header: 'Gross Salary', key: 'gross', width: 15 },
       { header: 'Pension Employee (5%)', key: 'trustEmp', width: 20 },
       { header: 'Pension Employer (5%)', key: 'trustComp', width: 20 },
       { header: 'Tax (TAP)', key: 'tax', width: 15 },
       { header: 'Net Salary', key: 'net', width: 15 },
-      { header: 'Total Company Cost', key: 'cost', width: 20 }, // Tax Accountant reads this
+      { header: 'Total Company Cost', key: 'cost', width: 20 },
     ];
 
     sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -124,6 +161,7 @@ const PayrollManager = () => {
     employees.forEach(e => {
         sheet.addRow({
             name: e.name,
+            role: e.role,
             gross: e.gross,
             trustEmp: e.pensionEmployee,
             trustComp: e.pensionEmployer,
@@ -133,7 +171,6 @@ const PayrollManager = () => {
         });
     });
 
-    // Hidden Meta-row for the System to detect Month/Year
     sheet.addRow([]);
     sheet.addRow(["META", period.month, period.year, "PAYROLL_FILE"]); 
 
@@ -144,14 +181,11 @@ const PayrollManager = () => {
   // --- PDF EXPORT ---
   const downloadPayrollPDF = () => {
     const doc = new jsPDF();
-    
     doc.setFillColor(79, 70, 229); 
     doc.rect(0, 0, 210, 25, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(18);
     doc.text(t.payrollReport || "Payroll Summary", 14, 16);
-    doc.setFontSize(10);
-    doc.text(`${period.month} ${period.year}`, 195, 16, {align: 'right'});
     
     const tableData = employees.map(e => [
       e.name,
@@ -168,28 +202,14 @@ const PayrollManager = () => {
       head: [[t.employeeName, "Gross", "Trst(5%)", "Comp(5%)", "TAP", "NET", "Total Cost"]],
       body: tableData,
       theme: 'grid',
-      headStyles: { fillColor: [79, 70, 229] },
-      styles: { fontSize: 8, halign: 'right' },
-      columnStyles: { 0: { halign: 'left', fontStyle: 'bold' }, 5: { fontStyle: 'bold', textColor: [16, 185, 129] } } 
     });
-
-    const finalY = doc.lastAutoTable.finalY + 10;
-    doc.setDrawColor(200);
-    doc.line(14, finalY, 196, finalY);
-    
-    doc.setFontSize(10); doc.setTextColor(0);
-    doc.text(`Total Taxes (ATK): €${totals.taxOnly.toFixed(2)}`, 196, finalY + 10, {align: 'right'});
-    doc.text(`Total Pension (Trust): €${totals.pensionTotal.toFixed(2)}`, 196, finalY + 16, {align: 'right'});
-    doc.setFontSize(12); doc.setFont("helvetica", "bold");
-    doc.text(`TOTAL COMPANY COST: €${totals.cost.toFixed(2)}`, 196, finalY + 24, {align: 'right'});
-
     doc.save(`Payroll_${period.month}_${period.year}.pdf`);
   };
 
   return (
     <div className="container mt-4 mb-5">
       
-      {/* 1. DASHBOARD SUMMARY CARDS */}
+      {/* 1. DASHBOARD SUMMARY CARDS (Same visual as before) */}
       <div className="row g-3 mb-4">
         <div className="col-md-4">
             <div className="p-4 bg-white rounded-4 shadow-sm border-start border-primary border-4 h-100">
@@ -216,7 +236,6 @@ const PayrollManager = () => {
                     <span className="text-muted small fw-bold uppercase">State Liabilities</span>
                 </div>
                 <h2 className="fw-bold text-dark mb-0">€{totals.taxes.toLocaleString(undefined, {minimumFractionDigits: 2})}</h2>
-                <small className="text-muted extra-small">Tax + Pension (10%)</small>
             </div>
         </div>
       </div>
@@ -229,7 +248,7 @@ const PayrollManager = () => {
               <h4 className="fw-bold text-primary mb-1 d-flex align-items-center gap-2"><Users size={24}/> {t.payrollTitle}</h4>
               <p className="text-muted small mb-0">{t.payrollSubtitle || "Manage employee salaries and tax obligations."}</p>
             </div>
-            {/* DATE SELECTOR FOR EXPORT CONTEXT */}
+            {/* DATE SELECTOR */}
             <div className="d-flex gap-2">
                 <div className="input-group input-group-sm">
                     <span className="input-group-text bg-white border-end-0"><Calendar size={14}/></span>
@@ -245,48 +264,55 @@ const PayrollManager = () => {
             </div>
           </div>
 
-          {/* 2. EMPLOYEE ENTRY FORM */}
+          {/* 2. EMPLOYEE SELECTION FORM */}
           <div className="bg-light p-4 rounded-4 mb-5 border border-dashed">
              <div className="row g-3 align-items-end">
                 <div className="col-md-4">
-                   <label className="small fw-bold text-muted mb-1">{t.employeeName}</label>
-                   <input type="text" className="form-control border-0 shadow-sm py-2" placeholder="Full Name..." 
-                     value={newEmployee.name} onChange={e => setNewEmployee({...newEmployee, name: e.target.value})} />
+                   <label className="small fw-bold text-muted mb-1">Select Employee</label>
+                   <div className="input-group shadow-sm">
+                       <span className="input-group-text bg-white border-0"><UserCheck size={16} className="text-primary"/></span>
+                       <select className="form-select border-0 py-2 fw-bold" value={selectedWorkerId} onChange={handleWorkerSelect}>
+                           <option value="">-- Select Worker --</option>
+                           {dbWorkers.map(w => (
+                               <option key={w.id} value={w.id}>{w.name}</option>
+                           ))}
+                       </select>
+                   </div>
                 </div>
                 <div className="col-md-5">
                    <label className="small fw-bold text-muted mb-1">{t.salary || "Salary Amount"}</label>
                    <div className="input-group shadow-sm">
                       <select className="form-select border-0 bg-white text-muted fw-bold" style={{maxWidth: '90px'}}
-                        value={newEmployee.type} onChange={e => setNewEmployee({...newEmployee, type: e.target.value})}>
+                        value={salaryType} onChange={e => setSalaryType(e.target.value)}>
                           <option value="gross">Gross</option>
                           <option value="net">Net</option>
                       </select>
                       <input type="number" className="form-control border-0" placeholder="0.00" 
-                        value={newEmployee.amount} onChange={e => setNewEmployee({...newEmployee, amount: e.target.value})} />
+                        value={salaryOverride} onChange={e => setSalaryOverride(e.target.value)} />
                       <span className="input-group-text bg-white border-0 text-muted">€</span>
                    </div>
                 </div>
                 <div className="col-md-3">
-                   <button className="btn btn-primary w-100 fw-bold shadow-sm py-2" onClick={addEmployee}>
-                     <Plus size={18} className="me-1"/> {t.addEmployee}
+                   <button className="btn btn-primary w-100 fw-bold shadow-sm py-2" onClick={addEmployeeToPayroll} disabled={!selectedWorkerId}>
+                     <Plus size={18} className="me-1"/> Add to List
                    </button>
                 </div>
              </div>
-             {newEmployee.type === 'net' && (
+             {salaryType === 'net' && salaryOverride && (
                  <div className="mt-2 text-end">
                      <span className="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">
-                        <Calculator size={12} className="me-1"/> Auto-Calculate Gross from Net
+                        <Calculator size={12} className="me-1"/> Auto-Calculating Gross...
                      </span>
                  </div>
              )}
           </div>
 
-          {/* 3. SALARY TABLE */}
+          {/* 3. PAYROLL TABLE */}
           <div className="table-responsive rounded-4 border overflow-hidden mb-4">
             <table className="table table-hover align-middle mb-0">
               <thead className="bg-light">
                 <tr>
-                  <th className="ps-4 py-3 text-muted small text-uppercase fw-bold" style={{width: '25%'}}>{t.employeeName}</th>
+                  <th className="ps-4 py-3 text-muted small text-uppercase fw-bold">{t.employeeName}</th>
                   <th className="text-end text-muted small text-uppercase fw-bold">Gross</th>
                   <th className="text-end text-muted small text-uppercase fw-bold text-nowrap">{t.trust} (5%)</th>
                   <th className="text-end text-muted small text-uppercase fw-bold">{t.taxTAP}</th>
@@ -298,13 +324,13 @@ const PayrollManager = () => {
               <tbody>
                 <AnimatePresence>
                   {employees.length === 0 ? (
-                    <tr><td colSpan="7" className="text-center py-5 text-muted fst-italic bg-white">No employees added. Start by entering a salary above.</td></tr>
+                    <tr><td colSpan="7" className="text-center py-5 text-muted fst-italic bg-white">Select a worker above to begin payroll.</td></tr>
                   ) : (
                     employees.map(e => (
                       <motion.tr key={e.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} layout className="bg-white">
                         <td className="ps-4">
                             <div className="fw-bold text-dark">{e.name}</div>
-                            {e.inputType === 'net' && <span className="badge bg-light text-muted border extra-small">Target Net: €{e.inputAmount}</span>}
+                            <small className="text-muted">{e.role}</small>
                         </td>
                         <td className="text-end fw-bold text-dark">€{e.gross.toFixed(2)}</td>
                         <td className="text-end text-muted small">
@@ -331,23 +357,11 @@ const PayrollManager = () => {
             </table>
           </div>
 
-          {/* 4. VISUAL BREAKDOWN BAR */}
-          {employees.length > 0 && (
-              <div className="mb-4">
-                  <label className="extra-small fw-bold text-muted text-uppercase mb-2">Cost Distribution</label>
-                  <div className="progress" style={{height: '24px', borderRadius: '12px'}}>
-                      <div className="progress-bar bg-success" style={{width: `${(totals.net / totals.cost) * 100}%`}}>Net ({Math.round((totals.net / totals.cost) * 100)}%)</div>
-                      <div className="progress-bar bg-warning text-dark" style={{width: `${(totals.pensionTotal / totals.cost) * 100}%`}}>Trust</div>
-                      <div className="progress-bar bg-danger" style={{width: `${(totals.taxOnly / totals.cost) * 100}%`}}>Tax</div>
-                  </div>
-              </div>
-          )}
-
-          {/* 5. EXPORT ACTIONS */}
+          {/* 4. EXPORT ACTIONS */}
           {employees.length > 0 && (
              <div className="d-flex flex-column flex-md-row justify-content-end gap-3 mt-4 pt-3 border-top">
                 <button className="btn btn-light border fw-bold d-flex align-items-center justify-content-center gap-2" onClick={downloadPayrollExcel}>
-                   <FileSpreadsheet size={18} className="text-success"/> Export Excel
+                   <FileSpreadsheet size={18} className="text-success"/> Export for Tax Accountant
                 </button>
                 <button className="btn btn-primary fw-bold shadow-sm d-flex align-items-center justify-content-center gap-2 px-4" onClick={downloadPayrollPDF}>
                    <Download size={18}/> Download Payslips (PDF)
