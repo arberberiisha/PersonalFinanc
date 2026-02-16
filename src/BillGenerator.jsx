@@ -137,9 +137,9 @@ const BillGenerator = ({ userRole, userName }) => {
       from: isSq ? "NGA:" : "FROM:",
       payment: isSq ? "Mënyra e pagesës:" : "Payment Method:",
       vat: isSq ? "TVSH:" : "VAT:",
-      sub: isSq ? "Nëntotali:" : "Subtotal:",
+      sub: isSq ? "Nëntotali: " : "Subtotal: ",
       disc: isSq ? "Zbritje:" : "Discount:",
-      due: isSq ? "GJITHSEJ PËR PAGESË" : "TOTAL AMOUNT DUE",
+      due: isSq ? "GJITHSEJ PËR PAGESË " : "TOTAL AMOUNT DUE ",
       note: isSq ? "Shënim:" : "Note:"
     };
 
@@ -183,8 +183,8 @@ const BillGenerator = ({ userRole, userName }) => {
             i.description || "---", 
             i.quantity, 
             i.unit ? i.unit.replace(/m2/gi, "m²") : "-", 
-            `€${Number(i.price).toLocaleString(undefined, {minimumFractionDigits: 2})}`, 
-            `€${(Number(i.quantity) * Number(i.price)).toLocaleString(undefined, {minimumFractionDigits: 2})}`
+            `€ ${Number(i.price).toLocaleString(undefined, {minimumFractionDigits: 2})}`, 
+            `€ ${(Number(i.quantity) * Number(i.price)).toLocaleString(undefined, {minimumFractionDigits: 2})}`
         ]);
     } else {
         // Advanced Mode
@@ -196,10 +196,10 @@ const BillGenerator = ({ userRole, userName }) => {
                 i.sku || "-",
                 i.description || "---", 
                 i.quantity, 
-                `€${Number(i.price).toFixed(2)}`,
+                `€ ${Number(i.price).toFixed(2)}`,
                 `${i.vatRate}%`,
                 i.discount > 0 ? `${i.discount}%` : "-",
-                `€${discountedTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}`
+                `€ ${discountedTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}`
             ];
         });
     }
@@ -224,14 +224,14 @@ const BillGenerator = ({ userRole, userName }) => {
     
     // Subtotal
     doc.text(labels.sub, summaryX, finalY);
-    doc.text(`€${totals.subTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}`, pageWidth - margin, finalY, { align: "right" });
+    doc.text(`€ ${totals.subTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}`, pageWidth - margin, finalY, { align: "right" });
 
     // Discount
     if (mode === 'advanced' && totals.totalDiscount > 0) {
         finalY += 6;
         doc.setTextColor(220, 38, 38);
         doc.text(labels.disc, summaryX, finalY);
-        doc.text(`- €${totals.totalDiscount.toLocaleString(undefined, {minimumFractionDigits: 2})}`, pageWidth - margin, finalY, { align: "right" });
+        doc.text(`- € ${totals.totalDiscount.toLocaleString(undefined, {minimumFractionDigits: 2})}`, pageWidth - margin, finalY, { align: "right" });
         doc.setTextColor(100);
     }
 
@@ -239,7 +239,7 @@ const BillGenerator = ({ userRole, userName }) => {
     if(totals.vatAmount > 0 || (mode === 'simple' && invoice.hasVAT)) {
         finalY += 6;
         doc.text(labels.vat, summaryX, finalY);
-        doc.text(`€${totals.vatAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}`, pageWidth - margin, finalY, { align: "right" });
+        doc.text(`€ ${totals.vatAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}`, pageWidth - margin, finalY, { align: "right" });
     }
 
     // Grand Total
@@ -247,7 +247,7 @@ const BillGenerator = ({ userRole, userName }) => {
     doc.rect(summaryX - 5, finalY + 5, 65, 12, "F");
     doc.setFont("helvetica", "bold"); doc.setTextColor(255);
     doc.text(labels.due, summaryX, finalY + 13);
-    doc.text(`€${totals.grandTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}`, pageWidth - margin - 3, finalY + 13, { align: "right" });
+    doc.text(`€ ${totals.grandTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}`, pageWidth - margin - 3, finalY + 13, { align: "right" });
 
     // Footer
     const footerY = doc.internal.pageSize.getHeight() - 35;
@@ -385,7 +385,7 @@ const BillGenerator = ({ userRole, userName }) => {
         </div>
         <div className="text-md-end w-100 w-md-auto bg-light bg-opacity-50 p-3 rounded-4 border-start border-primary border-4 border-md-0">
           <label className="text-muted small fw-bold tracking-widest text-uppercase d-block">{language === 'sq' ? 'Shuma Totale' : 'Total Amount'}</label>
-          <h2 className="fw-bold text-dark mb-0">€{totals.grandTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}</h2>
+          <h2 className="fw-bold text-dark mb-0">€ {totals.grandTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}</h2>
         </div>
       </div>
 
@@ -469,7 +469,7 @@ const BillGenerator = ({ userRole, userName }) => {
                             />
                             <datalist id={`products-list-${idx}`}>
                                 {products.map(p => (
-                                    <option key={p.id} value={p.name}>{p.sku} - €{p.price}</option>
+                                    <option key={p.id} value={p.name}>{p.sku} - € {p.price}</option>
                                 ))}
                             </datalist>
                         </div>
@@ -515,7 +515,7 @@ const BillGenerator = ({ userRole, userName }) => {
 
                   {/* Total Line */}
                   <td data-label={t.total} className="text-md-end pe-md-4 fw-bold text-primary">
-                      €{((item.quantity * item.price) * (1 - (mode === 'advanced' ? (item.discount / 100) : 0))).toLocaleString(undefined, {minimumFractionDigits: 2})}
+                      € {((item.quantity * item.price) * (1 - (mode === 'advanced' ? (item.discount / 100) : 0))).toLocaleString(undefined, {minimumFractionDigits: 2})}
                   </td>
 
                   <td className="text-center">
@@ -551,19 +551,19 @@ const BillGenerator = ({ userRole, userName }) => {
         </div>
         <div className="col-12 col-md-4 order-1 order-md-2">
             <div className="card border-0 bg-primary bg-opacity-10 p-3 rounded-4 shadow-none">
-                <div className="d-flex justify-content-between small text-muted mb-1 fw-bold"><span>{language === 'sq' ? 'Nëntotali' : 'Subtotal'}</span><span>€{totals.subTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}</span></div>
+                <div className="d-flex justify-content-between small text-muted mb-1 fw-bold"><span>{language === 'sq' ? 'Nëntotali' : 'Subtotal'}</span><span>€ {totals.subTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}</span></div>
                 
                 {mode === 'advanced' && totals.totalDiscount > 0 && (
-                    <div className="d-flex justify-content-between small text-danger mb-1 fw-bold"><span>{language === 'sq' ? 'Zbritje' : 'Discount'}</span><span>-€{totals.totalDiscount.toLocaleString(undefined, {minimumFractionDigits: 2})}</span></div>
+                    <div className="d-flex justify-content-between small text-danger mb-1 fw-bold"><span>{language === 'sq' ? 'Zbritje' : 'Discount'}</span><span>-€ {totals.totalDiscount.toLocaleString(undefined, {minimumFractionDigits: 2})}</span></div>
                 )}
 
                 {/* VAT Line: Shows in Advanced always (if > 0) OR Simple if Checked */}
                 {(totals.vatAmount > 0 || (mode === 'simple' && invoice.hasVAT)) && (
-                    <div className="d-flex justify-content-between small text-muted mb-1 fw-bold"><span>VAT</span><span>€{totals.vatAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}</span></div>
+                    <div className="d-flex justify-content-between small text-muted mb-1 fw-bold"><span>VAT</span><span>€ {totals.vatAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}</span></div>
                 )}
                 
                 <hr className="my-2 border-primary border-opacity-25" />
-                <div className="d-flex justify-content-between fw-bold text-primary h4 mb-0"><span>{language === 'sq' ? 'Totali' : 'Grand Total'}</span><span>€{totals.grandTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}</span></div>
+                <div className="d-flex justify-content-between fw-bold text-primary h4 mb-0"><span>{language === 'sq' ? 'Totali' : 'Grand Total'}</span><span>€ {totals.grandTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}</span></div>
             </div>
         </div>
       </div>
