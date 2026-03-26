@@ -5,10 +5,19 @@ import Swal from "sweetalert2";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Download, Image as ImageIcon, Trash2, Hash, CreditCard, Notebook, 
-  Sparkles, User, MapPin, Mail, FileText, FileBarChart2, Search // Added Search Icon
+  Sparkles, User, MapPin, Mail, FileText, FileBarChart2, Search, Globe
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+
+// --- HELPER FUNCTION FOR UNIQUE INVOICE NUMBERS ---
+const generateInvoiceNumber = () => {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const randomDigits = Math.floor(1000 + Math.random() * 9000); // 4 random digits
+  return `INV-${year}${month}-${randomDigits}`;
+};
 
 const BillGenerator = ({ userRole, userName }) => {
   const { translations: t, language } = useTranslations();
@@ -19,7 +28,7 @@ const BillGenerator = ({ userRole, userName }) => {
   
   const [invoice, setInvoice] = useState({
     logo: null,
-    invoiceNumber: "INV-001",
+    invoiceNumber: generateInvoiceNumber(), // Automatically generates a unique number on load
     date: new Date().toISOString().split("T")[0],
     senderName: "RBTech, KS",
     senderAddress: "Pristina, Kosovo",
@@ -30,6 +39,7 @@ const BillGenerator = ({ userRole, userName }) => {
     paymentMethod: "",
     notes: "Thank you for your business!", 
     hasVAT: false, 
+    isExport: false, 
     items: [{ sku: "", description: "", quantity: 1, unit: "pcs", price: 0, vatRate: 18, productId: null, discount: 0 }],
   });
 
@@ -90,7 +100,10 @@ const BillGenerator = ({ userRole, userName }) => {
         const discountedLineTotal = lineTotal - lineDiscount;
 
         let itemVatRate = 0;
-        if (mode === 'advanced') {
+        
+        if (invoice.isExport) {
+            itemVatRate = 0;
+        } else if (mode === 'advanced') {
             itemVatRate = Number(item.vatRate || 0);
         } else {
             itemVatRate = invoice.hasVAT ? 18 : 0;
@@ -107,7 +120,7 @@ const BillGenerator = ({ userRole, userName }) => {
     const grandTotal = netAmount + totalVAT;
 
     return { subTotal, totalDiscount, vatAmount: totalVAT, grandTotal };
-  }, [invoice.items, invoice.hasVAT, mode]);
+  }, [invoice.items, invoice.hasVAT, invoice.isExport, mode]);
 
   // --- PDF GENERATION ---
   const handleDownloadPDF = () => {
@@ -119,11 +132,11 @@ const BillGenerator = ({ userRole, userName }) => {
     const doc = new jsPDF("p", "mm", "a4");
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 20; 
-    const primaryPurple = [79, 70, 229];
+    const primaryColor = [79, 70, 229];
 
     // Dates
     const dateObj = new Date(invoice.date);
-    const monthTranslated = t.months[dateObj.getMonth()];
+    const monthTranslated = t.months ? t.months[dateObj.getMonth()] : dateObj.toLocaleString('default', { month: 'long' });
     const formattedDate = isSq 
       ? `${dateObj.getDate()} ${monthTranslated}, ${dateObj.getFullYear()}` 
       : `${monthTranslated} ${dateObj.getDate()}, ${dateObj.getFullYear()}`;
@@ -143,19 +156,16 @@ const BillGenerator = ({ userRole, userName }) => {
       note: isSq ? "Shënim:" : "Note:"
     };
 
-    // Header Background
     doc.setFillColor(249, 250, 251);
     doc.rect(0, 0, pageWidth, 45, 'F'); 
 
-    // Logo / Brand
     if (invoice.logo) {
       try { doc.addImage(invoice.logo, "PNG", margin, 12, 35, 20); } catch (e) {}
     } else {
-      doc.setFontSize(22); doc.setFont("helvetica", "bold"); doc.setTextColor(...primaryPurple);
+      doc.setFontSize(22); doc.setFont("helvetica", "bold"); doc.setTextColor(...primaryColor);
       doc.text("RB Tech", margin, 25);
     }
 
-    // Title & Meta
     doc.setFontSize(24); doc.setFont("helvetica", "bold"); doc.setTextColor(31, 41, 55);
     doc.text(labels.title, pageWidth - margin, 22, { align: "right" });
 
@@ -163,9 +173,8 @@ const BillGenerator = ({ userRole, userName }) => {
     doc.text(`${labels.inv} ${invoice.invoiceNumber}`, pageWidth - margin, 30, { align: "right" });
     doc.text(`${labels.date} ${formattedDate}`, pageWidth - margin, 35, { align: "right" });
 
-    // Address Block
     const infoY = 65;
-    doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...primaryPurple);
+    doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...primaryColor);
     doc.text(labels.billedTo, margin, infoY);
     doc.text(labels.from, pageWidth / 2 + 10, infoY);
     
@@ -173,7 +182,6 @@ const BillGenerator = ({ userRole, userName }) => {
     doc.text([invoice.clientName, invoice.clientAddress, invoice.clientEmail].filter(Boolean), margin, infoY + 6);
     doc.text([invoice.senderName, invoice.senderAddress, invoice.senderEmail], pageWidth / 2 + 10, infoY + 6);
 
-    // --- TABLE CONFIGURATION ---
     let tableHead = [];
     let tableBody = [];
 
@@ -187,17 +195,18 @@ const BillGenerator = ({ userRole, userName }) => {
             `€ ${(Number(i.quantity) * Number(i.price)).toLocaleString(undefined, {minimumFractionDigits: 2})}`
         ]);
     } else {
-        // Advanced Mode
         tableHead = [[ "Ref/SKU", isSq ? "Përshkrimi" : "Description", isSq ? "Sasia" : "Qty", isSq ? "Çmimi" : "Price", "VAT %", "Disc %", "Total"]];
         tableBody = invoice.items.map(i => {
             const rawTotal = i.quantity * i.price;
             const discountedTotal = rawTotal - (rawTotal * (i.discount / 100));
+            const displayVat = invoice.isExport ? "0%" : `${i.vatRate}%`;
+
             return [
                 i.sku || "-",
                 i.description || "---", 
                 i.quantity, 
                 `€ ${Number(i.price).toFixed(2)}`,
-                `${i.vatRate}%`,
+                displayVat,
                 i.discount > 0 ? `${i.discount}%` : "-",
                 `€ ${discountedTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}`
             ];
@@ -209,24 +218,21 @@ const BillGenerator = ({ userRole, userName }) => {
       head: tableHead,
       body: tableBody,
       theme: "striped",
-      headStyles: { fillColor: primaryPurple, textColor: 255, fontSize: 10, fontStyle: 'bold' },
+      headStyles: { fillColor: primaryColor, textColor: 255, fontSize: 10, fontStyle: 'bold' },
       styles: { fontSize: 9, cellPadding: 5 },
       columnStyles: mode === 'simple' 
         ? { 1: { halign: "center" }, 2: { halign: "center" }, 3: { halign: "right" }, 4: { halign: "right", fontStyle: "bold" } }
         : { 2: { halign: "center" }, 3: { halign: "right" }, 4: { halign: "center" }, 5: { halign: "center" }, 6: { halign: "right", fontStyle: "bold" } }
     });
 
-    // --- TOTALS ---
     let finalY = doc.lastAutoTable.finalY + 10;
     const summaryX = pageWidth - margin - 60;
     
     doc.setFontSize(10); doc.setTextColor(100);
     
-    // Subtotal
     doc.text(labels.sub, summaryX, finalY);
     doc.text(`€ ${totals.subTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}`, pageWidth - margin, finalY, { align: "right" });
 
-    // Discount
     if (mode === 'advanced' && totals.totalDiscount > 0) {
         finalY += 6;
         doc.setTextColor(220, 38, 38);
@@ -235,21 +241,19 @@ const BillGenerator = ({ userRole, userName }) => {
         doc.setTextColor(100);
     }
 
-    // VAT
-    if(totals.vatAmount > 0 || (mode === 'simple' && invoice.hasVAT)) {
+    if(totals.vatAmount > 0 || invoice.hasVAT || invoice.isExport) {
         finalY += 6;
-        doc.text(labels.vat, summaryX, finalY);
+        const vatLabel = invoice.isExport ? (isSq ? "TVSH (Eksport 0%):" : "VAT (Export 0%):") : labels.vat;
+        doc.text(vatLabel, summaryX, finalY);
         doc.text(`€ ${totals.vatAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}`, pageWidth - margin, finalY, { align: "right" });
     }
 
-    // Grand Total
-    doc.setFillColor(...primaryPurple);
+    doc.setFillColor(...primaryColor);
     doc.rect(summaryX - 5, finalY + 5, 65, 12, "F");
     doc.setFont("helvetica", "bold"); doc.setTextColor(255);
     doc.text(labels.due, summaryX, finalY + 13);
     doc.text(`€ ${totals.grandTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}`, pageWidth - margin - 3, finalY + 13, { align: "right" });
 
-    // Footer
     const footerY = doc.internal.pageSize.getHeight() - 35;
     doc.setDrawColor(230); doc.line(margin, footerY - 5, pageWidth - margin, footerY - 5);
     doc.setFontSize(9); doc.setTextColor(80);
@@ -261,72 +265,42 @@ const BillGenerator = ({ userRole, userName }) => {
       doc.text(invoice.paymentMethod, margin + 35, footerY);
     }
     
-    if (invoice.notes) {
+    let finalNotes = invoice.notes;
+    if (invoice.isExport) {
+        const legalPhrase = "VAT 0% - Export of services per Law No. 05/L-037.";
+        finalNotes = finalNotes ? `${finalNotes}\n\n*** Legal Notice: ${legalPhrase}` : `*** Legal Notice: ${legalPhrase}`;
+    }
+
+    if (finalNotes) {
       doc.setFont("helvetica", "bold"); doc.setTextColor(0);
       doc.text(labels.note, margin, footerY + 7);
       doc.setFont("helvetica", "normal"); doc.setTextColor(80);
-      doc.text(invoice.notes, margin + (isSq ? 15 : 12), footerY + 7);
+      
+      const splitNotes = doc.splitTextToSize(finalNotes, pageWidth - margin - 30);
+      doc.text(splitNotes, margin + (isSq ? 15 : 12), footerY + 7);
     }
 
     doc.save(`${invoice.invoiceNumber}.pdf`);
+
+    // Optionally: Generate a new random number for the NEXT invoice after downloading
+    setInvoice(prev => ({
+        ...prev,
+        invoiceNumber: generateInvoiceNumber()
+    }));
   };
 
   return (
     <div className="dashboard-card p-3 p-md-5 bg-white text-dark shadow-sm rounded-4">
-      {/* MOBILE OPTIMIZED CSS */}
       <style>{`
         @media (max-width: 768px) {
           .invoice-table thead { display: none; }
-          .invoice-table tr { 
-            display: block; 
-            margin-bottom: 1rem; 
-            padding: 1.5rem; 
-            background: #ffffff; 
-            border-radius: 12px;
-            border: 1px solid #f1f5f9;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-          }
-          .invoice-table td { 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-            border: none !important; 
-            padding: 0.75rem 0 !important;
-            border-bottom: 1px dashed #e2e8f0 !important;
-          }
+          .invoice-table tr { display: block; margin-bottom: 1rem; padding: 1.5rem; background: #ffffff; border-radius: 12px; border: 1px solid #f1f5f9; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+          .invoice-table td { display: flex; justify-content: space-between; align-items: center; border: none !important; padding: 0.75rem 0 !important; border-bottom: 1px dashed #e2e8f0 !important; }
           .invoice-table td:last-child { border-bottom: none !important; }
-          
-          .invoice-table td::before { 
-            content: attr(data-label); 
-            font-weight: 700; 
-            font-size: 0.7rem; 
-            text-transform: uppercase; 
-            color: #94a3b8;
-            letter-spacing: 0.5px;
-          }
-          
-          .invoice-table input, .invoice-table select { 
-            text-align: right !important; 
-            width: 60% !important; 
-            font-weight: 600;
-            color: #1e293b;
-          }
-
-          /* DESCRIPTION ROW FIX */
-          .invoice-table td:nth-child(2) { 
-            flex-direction: column;
-            align-items: flex-start;
-            gap: 0.5rem;
-            border-bottom: 2px solid #e2e8f0 !important;
-            padding-bottom: 1rem !important;
-            margin-bottom: 0.5rem;
-          }
-          .invoice-table td input[placeholder*="Description"], .invoice-table td select {
-            text-align: left !important;
-            width: 100% !important;
-            font-size: 1rem;
-            padding-left: 0;
-          }
+          .invoice-table td::before { content: attr(data-label); font-weight: 700; font-size: 0.7rem; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px; }
+          .invoice-table input, .invoice-table select { text-align: right !important; width: 60% !important; font-weight: 600; color: #1e293b; }
+          .invoice-table td:nth-child(2) { flex-direction: column; align-items: flex-start; gap: 0.5rem; border-bottom: 2px solid #e2e8f0 !important; padding-bottom: 1rem !important; margin-bottom: 0.5rem; }
+          .invoice-table td input[placeholder*="Description"], .invoice-table td select { text-align: left !important; width: 100% !important; font-size: 1rem; padding-left: 0; }
         }
       `}</style>
 
@@ -371,16 +345,38 @@ const BillGenerator = ({ userRole, userName }) => {
                 <Sparkles size={16} className="text-warning d-none d-md-block" />
                 <h3 className="fw-bold text-primary mb-0">{mode === 'simple' ? t.invoiceTitle : "Advanced Invoice"}</h3>
             </div>
-            {mode === 'simple' && (
+            
+            <div className="d-flex flex-wrap gap-3 mt-2">
                 <div className="form-check form-switch p-0 m-0 d-flex align-items-center gap-2">
-                    <input className="form-check-input ms-0 cursor-pointer" type="checkbox" checked={invoice.hasVAT} 
-                        onChange={e => setInvoice({...invoice, hasVAT: e.target.checked})} />
-                    <label className="small fw-bold text-muted text-uppercase tracking-wider">VAT (18%)</label>
+                    <input 
+                        className="form-check-input ms-0 cursor-pointer" 
+                        type="checkbox" 
+                        checked={invoice.hasVAT && !invoice.isExport} 
+                        disabled={invoice.isExport}
+                        onChange={e => setInvoice({...invoice, hasVAT: e.target.checked})} 
+                    />
+                    <label className={`small fw-bold text-uppercase tracking-wider ${invoice.isExport ? 'text-muted opacity-50' : 'text-dark'}`}>
+                        VAT (18%)
+                    </label>
                 </div>
-            )}
-            {mode === 'advanced' && (
-                <span className="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">Inventory Linked</span>
-            )}
+                
+                <div className="form-check form-switch p-0 m-0 d-flex align-items-center gap-2">
+                    <input 
+                        className="form-check-input ms-0 cursor-pointer border-info" 
+                        type="checkbox" 
+                        checked={invoice.isExport} 
+                        onChange={e => setInvoice({
+                            ...invoice, 
+                            isExport: e.target.checked, 
+                            hasVAT: e.target.checked ? false : invoice.hasVAT 
+                        })} 
+                    />
+                    <label className="small fw-bold text-info text-uppercase tracking-wider d-flex align-items-center gap-1">
+                        <Globe size={14}/> {language === 'sq' ? 'Eksport (0% TVSH)' : 'Foreign Export (0%)'}
+                    </label>
+                </div>
+            </div>
+
           </div>
         </div>
         <div className="text-md-end w-100 w-md-auto bg-light bg-opacity-50 p-3 rounded-4 border-start border-primary border-4 border-md-0">
@@ -442,33 +438,28 @@ const BillGenerator = ({ userRole, userName }) => {
             <AnimatePresence>
               {invoice.items.map((item, idx) => (
                 <motion.tr key={idx} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="border-bottom">
-                  {/* SKU Column (Advanced) */}
                   {mode === 'advanced' && (
                       <td data-label="SKU" className="ps-md-4 py-md-3">
                           <input type="text" className="form-control form-control-sm border-0 bg-transparent p-0 text-muted" placeholder="#" value={item.sku} readOnly />
                       </td>
                   )}
 
-                  {/* Description / Product Select */}
                   <td data-label={t.itemDesc} className={`${mode === 'simple' ? 'ps-md-4' : ''} py-md-3`}>
                     {mode === 'advanced' ? (
                         <div className="position-relative">
                             <input 
-                                list={`products-list-${idx}`} // Use datalist for searchable dropdown
+                                list={`products-list-${idx}`} 
                                 className="form-control form-control-sm border-0 bg-transparent fw-bold p-0 text-primary cursor-pointer"
                                 placeholder="Search product..."
                                 value={item.description}
                                 onChange={(e) => {
-                                    // 1. Update text immediately for typing
                                     handleItemChange(idx, 'description', e.target.value);
-                                    
-                                    // 2. Try to find match
-                                    const match = products.find(p => p.name === e.target.value);
+                                    const match = products?.find(p => p.name === e.target.value);
                                     if (match) handleProductSelect(idx, match.id);
                                 }}
                             />
                             <datalist id={`products-list-${idx}`}>
-                                {products.map(p => (
+                                {products?.map(p => (
                                     <option key={p.id} value={p.name}>{p.sku} - € {p.price}</option>
                                 ))}
                             </datalist>
@@ -484,36 +475,32 @@ const BillGenerator = ({ userRole, userName }) => {
                     )}
                   </td>
 
-                  {/* Quantity */}
                   <td data-label={t.itemQty}>
                     <input type="number" className="form-control form-control-sm border-0 bg-transparent p-0 text-md-center" value={item.quantity} onChange={e => handleItemChange(idx, "quantity", e.target.value)} />
                   </td>
 
-                  {/* Unit */}
                   <td data-label={language === 'sq' ? 'Njësia' : 'Unit'}>
                     <input type="text" className="form-control form-control-sm border-0 bg-transparent p-0 text-md-center" placeholder="m²" value={item.unit} onChange={e => handleItemChange(idx, "unit", e.target.value)} />
                   </td>
 
-                  {/* Price */}
                   <td data-label={t.itemPrice}>
                     <input type="number" className="form-control form-control-sm border-0 bg-transparent p-0 text-md-end fw-bold" value={item.price} onChange={e => handleItemChange(idx, "price", e.target.value)} disabled={mode === 'advanced'} />
                   </td>
 
-                  {/* VAT % (Advanced) */}
                   {mode === 'advanced' && (
                       <td data-label="VAT %" className="text-end">
-                          <span className="badge bg-light text-muted border">{item.vatRate}%</span>
+                          <span className={`badge border ${invoice.isExport ? 'bg-info bg-opacity-10 text-info border-info' : 'bg-light text-muted'}`}>
+                              {invoice.isExport ? "0%" : `${item.vatRate}%`}
+                          </span>
                       </td>
                   )}
 
-                  {/* Discount (Advanced) */}
                   {mode === 'advanced' && (
                       <td data-label="Discount %">
                           <input type="number" className="form-control form-control-sm border-0 bg-transparent p-0 text-md-end text-danger" placeholder="0" value={item.discount} onChange={e => handleItemChange(idx, "discount", e.target.value)} />
                       </td>
                   )}
 
-                  {/* Total Line */}
                   <td data-label={t.total} className="text-md-end pe-md-4 fw-bold text-primary">
                       € {((item.quantity * item.price) * (1 - (mode === 'advanced' ? (item.discount / 100) : 0))).toLocaleString(undefined, {minimumFractionDigits: 2})}
                   </td>
@@ -547,6 +534,16 @@ const BillGenerator = ({ userRole, userName }) => {
                     onChange={e => setInvoice({ ...invoice, notes: e.target.value })}
                  />
               </div>
+              
+              {/* LEGAL NOTICE PREVIEW */}
+              {invoice.isExport && (
+                  <div className="mt-3 p-2 bg-info bg-opacity-10 border border-info border-opacity-25 rounded small text-info d-flex gap-2">
+                      <Globe size={16} className="mt-1 flex-shrink-0" />
+                      <span>
+                          <strong>Legal Clause Active:</strong> "VAT 0% - Export of services per Law No. 05/L-037." will be printed on the final PDF.
+                      </span>
+                  </div>
+              )}
            </div>
         </div>
         <div className="col-12 col-md-4 order-1 order-md-2">
@@ -557,9 +554,15 @@ const BillGenerator = ({ userRole, userName }) => {
                     <div className="d-flex justify-content-between small text-danger mb-1 fw-bold"><span>{language === 'sq' ? 'Zbritje' : 'Discount'}</span><span>-€ {totals.totalDiscount.toLocaleString(undefined, {minimumFractionDigits: 2})}</span></div>
                 )}
 
-                {/* VAT Line: Shows in Advanced always (if > 0) OR Simple if Checked */}
-                {(totals.vatAmount > 0 || (mode === 'simple' && invoice.hasVAT)) && (
-                    <div className="d-flex justify-content-between small text-muted mb-1 fw-bold"><span>VAT</span><span>€ {totals.vatAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}</span></div>
+                {(totals.vatAmount > 0 || (mode === 'simple' && invoice.hasVAT) || invoice.isExport) && (
+                    <div className="d-flex justify-content-between small text-muted mb-1 fw-bold">
+                        <span className={invoice.isExport ? "text-info" : ""}>
+                            {invoice.isExport ? (language === 'sq' ? 'TVSH (Eksport)' : 'VAT (Export)') : 'VAT'}
+                        </span>
+                        <span className={invoice.isExport ? "text-info" : ""}>
+                            € {totals.vatAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}
+                        </span>
+                    </div>
                 )}
                 
                 <hr className="my-2 border-primary border-opacity-25" />
