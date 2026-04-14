@@ -79,7 +79,7 @@ export default function PersonalFinanceTracker() {
         'finance':   ['manager', 'personal'],
         'budget':    ['manager', 'personal'],
         'tax':       ['manager', 'personal'],
-        'documents': ['manager', 'personal', 'worker'], // Worker is included here
+        'documents': ['manager', 'personal', 'worker'],
         'admin':     [] 
     };
 
